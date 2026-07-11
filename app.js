@@ -144,13 +144,29 @@ function renderDash(){
 /* ---------- 고객관리 ---------- */
 function filteredClients(){
   return clients.filter(c=>{
-    if(filters.q && !((c.name||"")+(c.family||"")).includes(filters.q))return false;
+    if(filters.q){
+      const headName=c.family_head?((clients.find(x=>x.id===c.family_head)||{}).name||""):"";
+      if(!((c.name||"")+(c.family||"")+headName).includes(filters.q))return false;
+    }
     if(filters.manager && c.manager!==filters.manager)return false;
     if(filters.type && c.type!==filters.type)return false;
     if(filters.cat && !(c.categories||[]).includes(filters.cat))return false;
     if(filters.family && c.family!==filters.family)return false;
     return true;
   }).sort((a,b)=>Number(b.aum||0)-Number(a.aum||0));
+}
+function familyMembers(cid){return clients.filter(c=>c.family_head===cid)}
+function familyCell(c){
+  const members=familyMembers(c.id);
+  if(members.length){
+    const names=members.map(m=>esc(m.name)).slice(0,3).join(", ");
+    return `<b>주고객</b><div class="mini">${names}${members.length>3?" 외 "+(members.length-3)+"명":""}</div>`;
+  }
+  if(c.family_head){
+    const head=clients.find(x=>x.id===c.family_head);
+    return head?`<span class="mini">⤷ ${esc(head.name)} 패밀리</span>`:"-";
+  }
+  return esc(c.family||"-");
 }
 function renderClients(){
   const fams=[...new Set(clients.map(c=>c.family).filter(Boolean))];
@@ -172,18 +188,85 @@ function renderClients(){
       <td><b>${esc(c.name)}</b>${c.memo?`<div class="mini">${esc(c.memo).slice(0,30)}</div>`:""}</td>
       <td>${c.type||"-"}</td>
       <td><span class="grade g-${c.grade||"C"}">${c.grade||"-"}</span></td>
-      <td>${esc(c.family||"-")}</td>
+      <td>${familyCell(c)}</td>
       <td>${(c.categories||[]).map(catTag).join("")||"-"}</td>
       <td>${esc(c.manager||"-")}</td>
       <td>${fmt(c.aum)}</td>
       <td>${r?rateHtml(r.rate)+`<div class="mini">${r.base_date}</div>`:'<span class="mini">미입력</span>'}</td>
       <td style="white-space:nowrap">
+        <button class="btn btn-s btn-sm" onclick="openFamilyModal('${c.id}')">패밀리</button>
         <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
         <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률</button>
         <button class="btn btn-d btn-sm" onclick="delClient('${c.id}')">삭제</button>
       </td></tr>`}).join(""):'<tr><td colspan="9"><div class="empty">조건에 맞는 고객이 없습니다</div></td></tr>'}
     </tbody></table>
   </div>`;
+}
+
+/* ---------- 패밀리 고객 관리 ---------- */
+function openFamilyModal(cid){
+  const c=clients.find(x=>x.id===cid);if(!c)return;
+  if(c.family_head){
+    const head=clients.find(x=>x.id===c.family_head);
+    if(head&&confirm(`'${c.name}' 고객은 '${head.name}' 고객의 패밀리로 연결되어 있습니다.\n주고객 '${head.name}'의 패밀리 화면을 열까요?`)){
+      openFamilyModal(head.id);
+    }
+    return;
+  }
+  $("f_headId").value=cid;
+  $("f_headName").textContent=c.name;
+  renderFamily();
+  $("familyModal").classList.add("open");
+}
+function renderFamily(){
+  const hid=$("f_headId").value;
+  // 연결 후보: 본인 제외, 이미 다른 패밀리에 속하지 않고, 본인이 주고객이 아닌 고객
+  const candidates=clients.filter(c=>c.id!==hid&&!c.family_head&&familyMembers(c.id).length===0);
+  $("f_pick").innerHTML='<option value="">— 고객 선택 —</option>'+
+    candidates.map(c=>`<option value="${c.id}">${esc(c.name)} (${c.type||"개인"}${c.manager?" · "+esc(c.manager):""})</option>`).join("");
+  const members=familyMembers(hid);
+  $("f_list").innerHTML=members.length?`
+    <p class="mini" style="margin-bottom:6px">연결된 패밀리 고객 (${members.length}명)</p>
+    <table><thead><tr><th>이름</th><th>구분</th><th>담당자</th><th>AUM(백만)</th><th></th></tr></thead><tbody>
+    ${members.map(m=>`<tr>
+      <td><b>${esc(m.name)}</b></td><td>${m.type||"-"}</td><td>${esc(m.manager||"-")}</td><td>${fmt(m.aum)}</td>
+      <td><button class="btn btn-d btn-sm" onclick="unlinkFamily('${m.id}')">연결해제</button></td>
+    </tr>`).join("")}
+    <tr style="background:#f8f9fb;font-weight:700"><td>패밀리 합산</td><td></td><td></td>
+      <td>${fmt(members.reduce((s,m)=>s+Number(m.aum||0),0)+Number((clients.find(x=>x.id===hid)||{}).aum||0))}</td><td class="mini" style="font-weight:400">주고객 포함</td></tr>
+    </tbody></table>`
+    :'<div class="empty">아직 연결된 패밀리 고객이 없습니다.<br>위에서 기존 고객을 연결하거나 새로 등록하세요.</div>';
+}
+async function linkFamily(){
+  const hid=$("f_headId").value;
+  const mid=$("f_pick").value;
+  if(!mid){alert("연결할 고객을 선택하세요.");return}
+  const {error}=await db.from("clients").update({family_head:hid}).eq("id",mid);
+  if(error){err(error);return}
+  await loadAll();
+  renderFamily();
+}
+async function createFamily(){
+  const hid=$("f_headId").value;
+  const head=clients.find(x=>x.id===hid);
+  const name=$("f_newName").value.trim();
+  if(!name){alert("이름을 입력하세요.");return}
+  const {error}=await db.from("clients").insert({
+    name, type:"개인", manager:head?head.manager:me.name, grade:"B",
+    family_head:hid, categories:[]
+  });
+  if(error){err(error);return}
+  $("f_newName").value="";
+  await loadAll();
+  renderFamily();
+}
+async function unlinkFamily(mid){
+  const m=clients.find(x=>x.id===mid);
+  if(!confirm(`'${m.name}' 고객의 패밀리 연결을 해제할까요? (고객 자체는 삭제되지 않습니다)`))return;
+  const {error}=await db.from("clients").update({family_head:null}).eq("id",mid);
+  if(error){err(error);return}
+  await loadAll();
+  renderFamily();
 }
 function buildCatChecks(elId,selected){
   $(elId).innerHTML=CATS.map(c=>`<label><input type="checkbox" value="${c}" ${selected.includes(c)?"checked":""} ${elId==="c_cats"?'onchange="toggleWrapFields()"':""}>${c}</label>`).join("");

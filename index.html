@@ -244,6 +244,32 @@ tr:hover td{background:#fafbfd}
   </div>
 </div>
 
+<!-- 패밀리 고객 관리 -->
+<div class="modal-bg" id="familyModal">
+  <div class="modal" style="max-width:640px">
+    <h3>패밀리 고객 — <span id="f_headName"></span></h3>
+    <input type="hidden" id="f_headId">
+    <div class="fg" style="margin-bottom:12px">
+      <label>기존 고객을 패밀리로 연결</label>
+      <div style="display:flex;gap:6px">
+        <select id="f_pick" style="flex:1;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px"></select>
+        <button class="btn btn-p" onclick="linkFamily()">연결</button>
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:14px">
+      <label>새 패밀리 고객 바로 등록 (이름만 입력하면 등록과 동시에 연결됩니다)</label>
+      <div style="display:flex;gap:6px">
+        <input id="f_newName" placeholder="예: 김영희 (배우자)" style="flex:1" onkeydown="if(event.key==='Enter')createFamily()">
+        <button class="btn btn-p" onclick="createFamily()">등록+연결</button>
+      </div>
+    </div>
+    <div id="f_list"></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('familyModal')">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- 랩 정보 입력 -->
 <div class="modal-bg" id="wrapModal">
   <div class="modal">
