@@ -244,7 +244,32 @@ tr:hover td{background:#fafbfd}
   </div>
 </div>
 
+<!-- Excel 업로드 -->
+<div class="modal-bg" id="importModal">
+  <div class="modal" style="max-width:760px">
+    <h3>Excel 고객 일괄 업로드</h3>
+    <div class="msg" id="importMsg"></div>
+    <div class="fg" style="margin-bottom:12px">
+      <label>엑셀 파일 선택 (.xlsx / .xls / .csv) — 첫 행은 열 제목이어야 합니다</label>
+      <input type="file" id="importFile" accept=".xlsx,.xls,.csv" onchange="handleImportFile(event)">
+    </div>
+    <div id="mapArea" style="display:none">
+      <p class="mini" style="margin-bottom:8px">엑셀의 어떤 열이 어떤 항목인지 확인하세요. 자동으로 추측했지만 틀리면 직접 바꿀 수 있습니다.</p>
+      <div id="mapRows" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px"></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:10px">
+        <input type="checkbox" id="skipDup" checked> 이미 등록된 동일 이름 고객은 건너뛰기
+      </label>
+      <div id="importPreview" style="overflow-x:auto"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('importModal')">닫기</button>
+      <button class="btn btn-p" id="importRunBtn" style="display:none" onclick="runImport()">업로드 실행</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>
