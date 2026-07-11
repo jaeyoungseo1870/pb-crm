@@ -193,9 +193,9 @@ function toggleWrapFields(){
   $("wrapFields").style.display=on?"":"none";
 }
 function mgrOptions(sel){return managers.map(m=>`<option ${m===sel?"selected":""}>${esc(m)}</option>`).join("")}
-function openClientModal(id){
+function openClientModal(id,presetWrap){
   const c=id?clients.find(x=>x.id===id):null;
-  $("clientModalTitle").textContent=c?"고객 수정":"고객 등록";
+  $("clientModalTitle").textContent=c?"고객 수정":(presetWrap?"랩고객 등록":"고객 등록");
   $("c_id").value=c?c.id:"";
   $("c_name").value=c?c.name:"";
   $("c_type").value=c?c.type:"개인";
@@ -206,9 +206,8 @@ function openClientModal(id){
   $("c_phone").value=c?(c.phone||""):"";
   $("c_email").value=c?(c.email||""):"";
   $("c_memo").value=c?(c.memo||""):"";
-  buildCatChecks("c_cats",c?(c.categories||[]):[]);
+  buildCatChecks("c_cats",c?(c.categories||[]):(presetWrap?["랩"]:[]));
   const w=c&&c.wrap?c.wrap:{};
-  $("c_wrapFund").value=w.fund||"";
   $("c_wrapCompany").value=w.company||"";
   $("c_wrapAmount").value=w.amount||"";
   $("c_wrapDate").value=w.date||"";
@@ -226,7 +225,7 @@ async function saveClient(){
     aum:$("c_aum").value===""?null:Number($("c_aum").value),
     phone:$("c_phone").value.trim()||null, email:$("c_email").value.trim()||null,
     memo:$("c_memo").value.trim()||null, categories:cats,
-    wrap:cats.includes("랩")?{fund:$("c_wrapFund").value.trim(),company:$("c_wrapCompany").value.trim(),amount:$("c_wrapAmount").value,date:$("c_wrapDate").value}:null
+    wrap:cats.includes("랩")?{company:$("c_wrapCompany").value.trim(),amount:$("c_wrapAmount").value,date:$("c_wrapDate").value,curValue:(id?(clients.find(x=>x.id===id)?.wrap?.curValue??null):null)}:null
   };
   const q = id ? db.from("clients").update(row).eq("id",id) : db.from("clients").insert(row);
   const {error} = await q;
@@ -307,39 +306,91 @@ async function delReturn(rid,cid){
 function clientHoldingDates(cid){
   return [...new Set(holdings.filter(x=>x.client_id===cid).map(x=>x.base_date))].sort().reverse();
 }
+function wrapRate(w){
+  if(!w||!w.amount||!w.curValue)return null;
+  const a=Number(w.amount),v=Number(w.curValue);
+  if(!a||isNaN(a)||isNaN(v))return null;
+  return (v/a-1)*100;
+}
 function renderWrap(){
   const list=clients.filter(c=>(c.categories||[]).includes("랩"));
   const t=today();
   $("tab-wrap").innerHTML=`
+  <div class="toolbar">
+    <span class="mini">랩정보 버튼으로 계약·평가 정보를, 편입종목 버튼으로 포트폴리오를 관리하세요.</span>
+    <div style="flex:1"></div>
+    <button class="btn btn-p" onclick="openClientModal(null,true)">+ 랩고객 등록</button>
+  </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>운용펀드</th><th>운용사</th><th>계약금액(백만)</th><th>최근수익률</th><th>편입종목</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>계약일</th><th>계약금액(백만)</th><th>현재평가액(백만)</th><th>수익률</th><th>편입종목</th><th></th></tr></thead><tbody>
     ${list.length?list.map(c=>{
-      const w=c.wrap||{};const r=lastReturn(c.id);
+      const w=c.wrap||{};
+      const wr=wrapRate(w);
       const dates=clientHoldingDates(c.id);
       const hd=dates[0]||null;
       const cnt=hd?holdings.filter(x=>x.client_id===c.id&&x.base_date===hd).length:0;
       const hStale=!hd||((new Date(t)-new Date(hd))>1000*60*60*24*30);
       return `<tr>
-      <td><b>${esc(c.name)}</b></td><td>${esc(c.manager||"-")}</td>
-      <td>${esc(w.fund||"-")}</td><td>${esc(w.company||"-")}</td>
+      <td><b>${esc(c.name)}</b>${w.company?`<div class="mini">${esc(w.company)}</div>`:""}</td>
+      <td>${esc(c.manager||"-")}</td>
+      <td>${w.date||"-"}</td>
       <td>${fmt(w.amount)}</td>
-      <td>${r?rateHtml(r.rate)+`<div class="mini">${r.base_date}</div>`:'<span class="mini">미입력</span>'}</td>
+      <td>${fmt(w.curValue)}</td>
+      <td>${wr!=null?rateHtml(wr):'<span class="mini">평가액 미입력</span>'}</td>
       <td>${hd?`${cnt}종목<div class="mini">${hd}</div>`:'<span class="mini">미입력</span>'} ${hStale?'<span class="due-badge">갱신</span>':''}</td>
       <td style="white-space:nowrap">
+        <button class="btn btn-p btn-sm" onclick="openWrapModal('${c.id}')">랩정보</button>
         <button class="btn btn-p btn-sm" onclick="openHoldModal('${c.id}')">편입종목</button>
-        <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률</button>
-        <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
-      </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">유형에 \'랩\'이 포함된 고객이 여기에 표시됩니다</div></td></tr>'}
+        <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률이력</button>
+      </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">아직 랩고객이 없습니다. \'+ 랩고객 등록\' 버튼으로 시작하세요.<br>(기존 고객은 고객관리에서 수정 → 유형에 \'랩\' 체크)</div></td></tr>'}
     </tbody></table>
   </div>
-  <p class="mini" style="margin-top:8px">※ 편입종목 최근 기준일이 30일을 초과하면 '갱신' 배지가 표시됩니다.</p>`;
+  <p class="mini" style="margin-top:8px">※ 수익률 = 현재평가액 ÷ 계약금액 − 1 로 자동 계산됩니다. 편입종목 기준일이 30일을 초과하면 '갱신' 배지가 표시됩니다.</p>`;
+}
+
+/* ---------- 랩 정보 입력 ---------- */
+function openWrapModal(cid){
+  const c=clients.find(x=>x.id===cid);if(!c)return;
+  const w=c.wrap||{};
+  $("w_clientId").value=cid;
+  $("w_clientName").textContent=c.name;
+  $("w_manager").innerHTML=mgrOptions(c.manager||me.name);
+  $("w_date").value=w.date||"";
+  $("w_company").value=w.company||"";
+  $("w_amount").value=w.amount??"";
+  $("w_curValue").value=w.curValue??"";
+  calcWrapRate();
+  $("wrapModal").classList.add("open");
+}
+function calcWrapRate(){
+  const r=wrapRate({amount:$("w_amount").value,curValue:$("w_curValue").value});
+  $("w_rateView").innerHTML=r==null?'<span class="mini" style="font-weight:400">계약금액과 현재평가액을 입력하면 자동 계산됩니다</span>':rateHtml(r);
+}
+async function saveWrap(){
+  const cid=$("w_clientId").value;
+  const c=clients.find(x=>x.id===cid);if(!c)return;
+  const cats=c.categories||[];
+  const wrap={
+    company:$("w_company").value.trim(),
+    amount:$("w_amount").value===""?null:Number($("w_amount").value),
+    curValue:$("w_curValue").value===""?null:Number($("w_curValue").value),
+    date:$("w_date").value||null
+  };
+  const {error}=await db.from("clients").update({
+    manager:$("w_manager").value,
+    wrap,
+    categories:cats.includes("랩")?cats:[...cats,"랩"]
+  }).eq("id",cid);
+  if(error){err(error);return}
+  closeModal("wrapModal");
+  await loadAll();
 }
 
 /* ---------- 랩 편입종목 ---------- */
 function openHoldModal(cid){
   const c=clients.find(x=>x.id===cid);if(!c)return;
   $("h_clientId").value=cid;
-  $("h_clientName").textContent=c.name+(c.wrap&&c.wrap.fund?" · "+c.wrap.fund:"");
+  $("h_clientName").textContent=c.name;
   const dates=clientHoldingDates(cid);
   $("h_date").value=dates[0]||today();
   renderHoldings();

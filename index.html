@@ -172,14 +172,14 @@ tr:hover td{background:#fafbfd}
       <div class="fg"><label>투자 유형 (복수 선택)</label><div class="chkgrp" id="c_cats"></div></div>
     </div>
     <div class="frow full" id="wrapFields" style="display:none">
-      <div class="fg"><label>랩 운용펀드 정보</label>
+      <div class="fg"><label>랩 정보</label>
         <div class="frow" style="margin-bottom:0">
-          <input id="c_wrapFund" placeholder="운용펀드명">
           <input id="c_wrapCompany" placeholder="운용사">
+          <input id="c_wrapAmount" type="number" min="0" placeholder="계약금액(백만원)">
         </div>
         <div class="frow" style="margin:8px 0 0">
-          <input id="c_wrapAmount" type="number" min="0" placeholder="계약금액(백만원)">
           <input id="c_wrapDate" type="date" title="계약일">
+          <span></span>
         </div>
       </div>
     </div>
@@ -240,6 +240,35 @@ tr:hover td{background:#fafbfd}
     <div class="modal-actions">
       <button class="btn btn-s" onclick="closeModal('prospectModal')">취소</button>
       <button class="btn btn-p" onclick="saveProspect()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 랩 정보 입력 -->
+<div class="modal-bg" id="wrapModal">
+  <div class="modal">
+    <h3>랩 정보 — <span id="w_clientName"></span></h3>
+    <input type="hidden" id="w_clientId">
+    <div class="frow">
+      <div class="fg"><label>담당자</label><select id="w_manager"></select></div>
+      <div class="fg"><label>계약일</label><input id="w_date" type="date"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>운용사</label><input id="w_company" placeholder="운용사"></div>
+      <div class="fg"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>계약금액 (백만원)</label><input id="w_amount" type="number" min="0" oninput="calcWrapRate()"></div>
+      <div class="fg"><label>현재평가액 (백만원)</label><input id="w_curValue" type="number" min="0" oninput="calcWrapRate()"></div>
+    </div>
+    <div class="frow full">
+      <div class="fg"><label>수익률 (자동 계산)</label>
+        <div id="w_rateView" style="padding:9px 12px;background:#f2f4f8;border-radius:6px;font-size:15px;font-weight:700">-</div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('wrapModal')">취소</button>
+      <button class="btn btn-p" onclick="saveWrap()">저장</button>
     </div>
   </div>
 </div>
