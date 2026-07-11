@@ -8,7 +8,7 @@ const CAT_STYLE = {"주식":["--tag-stock","--tag-stock-t"],"채권":["--tag-bon
 
 let me = null;                 // {id, name}
 let managers = [];             // 가입한 팀원 이름 목록 (담당자 선택지)
-let clients = [], returns = [], prospects = [];
+let clients = [], returns = [], prospects = [], holdings = [];
 let filters = {q:"", manager:"", type:"", cat:"", family:""};
 
 /* ---------- 유틸 ---------- */
@@ -80,15 +80,17 @@ async function enter(user){
 
 /* ---------- 데이터 로드 ---------- */
 async function loadAll(manual){
-  const [p,c,r,s] = await Promise.all([
+  const [p,c,r,s,h] = await Promise.all([
     db.from("profiles").select("name").order("created_at"),
     db.from("clients").select("*").order("created_at"),
     db.from("returns").select("*"),
     db.from("prospects").select("*").order("created_at"),
+    db.from("holdings").select("*"),
   ]);
   if(p.error||c.error||r.error||s.error){err(p.error||c.error||r.error||s.error);return}
   managers = p.data.map(x=>x.name);
   clients = c.data; returns = r.data; prospects = s.data;
+  holdings = h.error ? [] : h.data;   // holdings 테이블 미생성 시에도 앱은 동작
   $("teamSub").textContent = "팀원: "+(managers.join(" · ")||"-");
   renderAll();
   if(manual){const el=$("teamSub");el.style.color="#ffd166";setTimeout(()=>el.style.color="",700)}
@@ -110,6 +112,8 @@ function renderDash(){
   const t = today();
   const dueP = prospects.filter(p=>{const n=nextContact(p);return !p.last_contact||(n&&n<=t)});
   const staleR = clients.filter(c=>{const r=lastReturn(c.id);if(!r)return true;return (new Date(t)-new Date(r.base_date))>1000*60*60*24*30});
+  const wrapC = clients.filter(c=>(c.categories||[]).includes("랩"));
+  const staleH = wrapC.filter(c=>{const d=clientHoldingDates(c.id)[0];if(!d)return true;return (new Date(t)-new Date(d))>1000*60*60*24*30});
 
   $("tab-dash").innerHTML = `
   <div class="cards">
@@ -120,9 +124,10 @@ function renderDash(){
     <div class="card"><div class="lbl">잠재고객</div><div class="val">${prospects.length}<small>명</small></div></div>
   </div>
   <div class="panel"><h2>오늘 할 일</h2>
-    ${dueP.length===0&&staleR.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
+    ${dueP.length===0&&staleR.length===0&&staleH.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
     ${dueP.length?`<p style="margin-bottom:8px"><span class="due-badge">접촉 필요</span> <b>${dueP.length}명</b>의 잠재고객 — ${dueP.slice(0,5).map(p=>esc(p.name)).join(", ")}${dueP.length>5?" 외":""} <span class="clickable" onclick="showTab('prospects')">→ 이동</span></p>`:""}
-    ${staleR.length?`<p><span class="due-badge">수익률 갱신</span> 30일 이상 미입력 <b>${staleR.length}명</b> — ${staleR.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleR.length>5?" 외":""} <span class="clickable" onclick="showTab('returns')">→ 이동</span></p>`:""}`}
+    ${staleR.length?`<p style="margin-bottom:8px"><span class="due-badge">수익률 갱신</span> 30일 이상 미입력 <b>${staleR.length}명</b> — ${staleR.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleR.length>5?" 외":""} <span class="clickable" onclick="showTab('returns')">→ 이동</span></p>`:""}
+    ${staleH.length?`<p><span class="due-badge">편입종목 갱신</span> 랩고객 <b>${staleH.length}명</b> — ${staleH.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleH.length>5?" 외":""} <span class="clickable" onclick="showTab('wrap')">→ 이동</span></p>`:""}`}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
     <div class="panel"><h2>담당자별 현황</h2>
@@ -299,22 +304,117 @@ async function delReturn(rid,cid){
 }
 
 /* ---------- 랩고객 ---------- */
+function clientHoldingDates(cid){
+  return [...new Set(holdings.filter(x=>x.client_id===cid).map(x=>x.base_date))].sort().reverse();
+}
 function renderWrap(){
   const list=clients.filter(c=>(c.categories||[]).includes("랩"));
+  const t=today();
   $("tab-wrap").innerHTML=`
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>운용펀드</th><th>운용사</th><th>계약금액(백만)</th><th>계약일</th><th>최근수익률</th><th></th></tr></thead><tbody>
-    ${list.length?list.map(c=>{const w=c.wrap||{};const r=lastReturn(c.id);return `<tr>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>운용펀드</th><th>운용사</th><th>계약금액(백만)</th><th>최근수익률</th><th>편입종목</th><th></th></tr></thead><tbody>
+    ${list.length?list.map(c=>{
+      const w=c.wrap||{};const r=lastReturn(c.id);
+      const dates=clientHoldingDates(c.id);
+      const hd=dates[0]||null;
+      const cnt=hd?holdings.filter(x=>x.client_id===c.id&&x.base_date===hd).length:0;
+      const hStale=!hd||((new Date(t)-new Date(hd))>1000*60*60*24*30);
+      return `<tr>
       <td><b>${esc(c.name)}</b></td><td>${esc(c.manager||"-")}</td>
       <td>${esc(w.fund||"-")}</td><td>${esc(w.company||"-")}</td>
-      <td>${fmt(w.amount)}</td><td>${w.date||"-"}</td>
+      <td>${fmt(w.amount)}</td>
       <td>${r?rateHtml(r.rate)+`<div class="mini">${r.base_date}</div>`:'<span class="mini">미입력</span>'}</td>
+      <td>${hd?`${cnt}종목<div class="mini">${hd}</div>`:'<span class="mini">미입력</span>'} ${hStale?'<span class="due-badge">갱신</span>':''}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
+        <button class="btn btn-p btn-sm" onclick="openHoldModal('${c.id}')">편입종목</button>
         <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률</button>
+        <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
       </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">유형에 \'랩\'이 포함된 고객이 여기에 표시됩니다</div></td></tr>'}
     </tbody></table>
-  </div>`;
+  </div>
+  <p class="mini" style="margin-top:8px">※ 편입종목 최근 기준일이 30일을 초과하면 '갱신' 배지가 표시됩니다.</p>`;
+}
+
+/* ---------- 랩 편입종목 ---------- */
+function openHoldModal(cid){
+  const c=clients.find(x=>x.id===cid);if(!c)return;
+  $("h_clientId").value=cid;
+  $("h_clientName").textContent=c.name+(c.wrap&&c.wrap.fund?" · "+c.wrap.fund:"");
+  const dates=clientHoldingDates(cid);
+  $("h_date").value=dates[0]||today();
+  renderHoldings();
+  $("holdModal").classList.add("open");
+}
+function renderHoldings(){
+  const cid=$("h_clientId").value;
+  const date=$("h_date").value;
+  const dates=clientHoldingDates(cid);
+  $("h_dates").innerHTML=dates.slice(0,8).map(d=>
+    `<button class="btn btn-sm ${d===date?"btn-p":"btn-s"}" onclick="$('h_date').value='${d}';renderHoldings()">${d.slice(2)}</button>`
+  ).join("");
+  const rows=holdings.filter(x=>x.client_id===cid&&x.base_date===date)
+    .sort((a,b)=>Number(b.weight||0)-Number(a.weight||0));
+  const wSum=rows.reduce((s,x)=>s+Number(x.weight||0),0);
+  const vSum=rows.reduce((s,x)=>s+Number(x.value||0),0);
+  $("h_table").innerHTML=rows.length?`
+    <table><thead><tr><th>종목명</th><th>코드</th><th>비중(%)</th><th>평가금액(백만)</th><th>수익률</th><th>메모</th><th></th></tr></thead><tbody>
+    ${rows.map(x=>`<tr>
+      <td><b>${esc(x.stock_name)}</b></td><td class="mini">${esc(x.stock_code||"-")}</td>
+      <td>${x.weight==null?"-":Number(x.weight).toFixed(1)}</td>
+      <td>${fmt(x.value)}</td>
+      <td>${x.rate==null?"-":rateHtml(x.rate)}</td>
+      <td class="mini">${esc(x.memo||"")}</td>
+      <td><button class="btn btn-d btn-sm" onclick="delHolding('${x.id}')">삭제</button></td>
+    </tr>`).join("")}
+    <tr style="background:#f8f9fb;font-weight:700"><td>합계 (${rows.length}종목)</td><td></td>
+      <td class="${Math.abs(wSum-100)<=0.5?"":"pos"}">${wSum.toFixed(1)}</td>
+      <td>${fmt(vSum)}</td><td colspan="3"></td></tr>
+    </tbody></table>
+    ${Math.abs(wSum-100)>0.5&&wSum>0?'<p class="mini" style="margin-top:6px;color:#c2570c">※ 비중 합계가 100%가 아닙니다.</p>':""}`
+    :'<div class="empty">이 기준일에 등록된 종목이 없습니다.<br>위에서 종목을 추가하거나 \'직전 기준일 종목 복사\'를 눌러 시작하세요.</div>';
+}
+async function addHolding(){
+  const cid=$("h_clientId").value;
+  const base_date=$("h_date").value;
+  const stock_name=$("hi_name").value.trim();
+  if(!base_date){alert("기준일을 선택하세요.");return}
+  if(!stock_name){alert("종목명을 입력하세요.");return}
+  const {error}=await db.from("holdings").insert({
+    client_id:cid, base_date, stock_name,
+    stock_code:$("hi_code").value.trim()||null,
+    weight:$("hi_weight").value===""?null:Number($("hi_weight").value),
+    value:$("hi_value").value===""?null:Number($("hi_value").value),
+    rate:$("hi_rate").value===""?null:Number($("hi_rate").value),
+    memo:$("hi_memo").value.trim()||null
+  });
+  if(error){err(error);return}
+  ["hi_name","hi_code","hi_weight","hi_value","hi_rate","hi_memo"].forEach(i=>$(i).value="");
+  $("hi_name").focus();
+  await loadAll();
+  renderHoldings();
+}
+async function delHolding(id){
+  const {error}=await db.from("holdings").delete().eq("id",id);
+  if(error){err(error);return}
+  await loadAll();
+  renderHoldings();
+}
+async function copyPrevHoldings(){
+  const cid=$("h_clientId").value;
+  const date=$("h_date").value;
+  if(!date){alert("기준일을 먼저 선택하세요.");return}
+  if(holdings.some(x=>x.client_id===cid&&x.base_date===date)){
+    alert("선택한 기준일에 이미 종목이 있습니다. 빈 기준일에서만 복사할 수 있습니다.");return;
+  }
+  const prevDates=clientHoldingDates(cid).filter(d=>d<date);
+  if(!prevDates.length){alert("복사할 이전 기준일 데이터가 없습니다.");return}
+  const src=holdings.filter(x=>x.client_id===cid&&x.base_date===prevDates[0]);
+  if(!confirm(`${prevDates[0]} 기준 ${src.length}종목을 ${date}(으)로 복사할까요?\n복사 후 비중·평가금액·수익률만 수정하면 됩니다.`))return;
+  const rows=src.map(x=>({client_id:cid,base_date:date,stock_name:x.stock_name,stock_code:x.stock_code,weight:x.weight,value:x.value,rate:x.rate,memo:null}));
+  const {error}=await db.from("holdings").insert(rows);
+  if(error){err(error);return}
+  await loadAll();
+  renderHoldings();
 }
 
 /* ---------- 잠재고객 ---------- */
