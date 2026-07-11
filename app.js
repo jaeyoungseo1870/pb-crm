@@ -158,6 +158,7 @@ function renderClients(){
     <select onchange="filters.cat=this.value;renderClients()"><option value="">유형 전체</option>${CATS.map(c=>`<option ${filters.cat===c?"selected":""}>${c}</option>`).join("")}</select>
     <select onchange="filters.family=this.value;renderClients()"><option value="">패밀리 전체</option>${fams.map(f=>`<option ${filters.family===f?"selected":""}>${esc(f)}</option>`).join("")}</select>
     <div style="flex:1"></div>
+    <button class="btn btn-s" onclick="openImportModal()">📄 Excel 업로드</button>
     <button class="btn btn-p" onclick="openClientModal()">+ 고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
@@ -408,6 +409,125 @@ async function delProspect(id){
   const {error}=await db.from("prospects").delete().eq("id",id);
   if(error){err(error);return}
   await loadAll();
+}
+
+/* ---------- Excel 일괄 업로드 ---------- */
+const IMPORT_FIELDS = [
+  {key:"name",      label:"고객명 (필수)",        hints:["고객명","이름","성명","고객"]},
+  {key:"type",      label:"구분(개인/법인)",      hints:["구분","개인/법인","법인여부"]},
+  {key:"family",    label:"패밀리 그룹",          hints:["패밀리","가족","패밀리그룹","family"]},
+  {key:"manager",   label:"담당자",               hints:["담당자","담당","pb","rm"]},
+  {key:"grade",     label:"등급",                 hints:["등급","grade","고객등급"]},
+  {key:"aum",       label:"AUM(백만원)",          hints:["aum","자산","금액","평가금액","잔고","예탁"]},
+  {key:"phone",     label:"연락처",               hints:["연락처","전화","휴대폰","핸드폰","hp","tel"]},
+  {key:"email",     label:"이메일",               hints:["이메일","메일","email","e-mail"]},
+  {key:"categories",label:"투자유형(쉼표 구분)",  hints:["유형","투자유형","카테고리","관심","상품"]},
+  {key:"memo",      label:"메모",                 hints:["메모","비고","note","참고"]},
+];
+let importHeaders=[], importRows=[];
+
+function openImportModal(){
+  importHeaders=[];importRows=[];
+  $("importFile").value="";
+  $("mapArea").style.display="none";
+  $("importRunBtn").style.display="none";
+  $("importMsg").className="msg";
+  $("importModal").classList.add("open");
+}
+function handleImportFile(ev){
+  const f=ev.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:"array"});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const arr=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+      // 빈 행 제거
+      const rows=arr.filter(r=>r.some(c=>String(c).trim()!==""));
+      if(rows.length<2){showMsg("importMsg","데이터가 없습니다. 첫 행에 열 제목, 둘째 행부터 고객 데이터가 있어야 합니다.");return}
+      importHeaders=rows[0].map(h=>String(h).trim());
+      importRows=rows.slice(1);
+      buildMappingUI();
+      $("mapArea").style.display="";
+      $("importRunBtn").style.display="";
+      showMsg("importMsg",`${importRows.length}건을 읽었습니다. 아래에서 열 연결을 확인하세요.`,true);
+    }catch(err2){showMsg("importMsg","파일을 읽지 못했습니다: "+err2.message)}
+  };
+  rd.readAsArrayBuffer(f);
+}
+function autoGuess(field){
+  const idx=importHeaders.findIndex(h=>{
+    const low=h.toLowerCase().replace(/\s/g,"");
+    return field.hints.some(k=>low.includes(k.toLowerCase()));
+  });
+  return idx;
+}
+function buildMappingUI(){
+  $("mapRows").innerHTML=IMPORT_FIELDS.map(f=>{
+    const guess=autoGuess(f);
+    return `<div class="fg"><label>${f.label}</label>
+      <select id="map_${f.key}" onchange="renderImportPreview()">
+        <option value="-1">— 사용 안 함 —</option>
+        ${importHeaders.map((h,i)=>`<option value="${i}" ${i===guess?"selected":""}>${esc(h)}</option>`).join("")}
+      </select></div>`;
+  }).join("");
+  renderImportPreview();
+}
+function mappedRow(r){
+  const get=k=>{const i=Number($("map_"+k).value);return i>=0?String(r[i]??"").trim():""};
+  const row={};
+  row.name=get("name");
+  const t=get("type"); row.type=t.includes("법")?"법인":"개인";
+  row.family=get("family")||null;
+  row.manager=get("manager")||me.name;
+  const g=get("grade").toUpperCase(); row.grade=["VIP","A","B","C"].includes(g)?g:"B";
+  const a=get("aum").replace(/[,\s원]/g,""); row.aum=a===""||isNaN(Number(a))?null:Number(a);
+  row.phone=get("phone")||null;
+  row.email=get("email")||null;
+  row.memo=get("memo")||null;
+  const cats=get("categories").split(/[,\/·;|]/).map(s=>s.trim()).filter(s=>CATS.includes(s));
+  row.categories=cats;
+  return row;
+}
+function renderImportPreview(){
+  const sample=importRows.slice(0,5).map(mappedRow);
+  $("importPreview").innerHTML=`
+    <p class="mini" style="margin-bottom:6px">미리보기 (상위 5건) — 이렇게 등록됩니다:</p>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>담당자</th><th>등급</th><th>AUM</th><th>유형</th></tr></thead><tbody>
+    ${sample.map(r=>`<tr>
+      <td>${r.name?`<b>${esc(r.name)}</b>`:'<span style="color:#c0392b">비어있음!</span>'}</td>
+      <td>${r.type}</td><td>${esc(r.family||"-")}</td><td>${esc(r.manager)}</td>
+      <td>${r.grade}</td><td>${fmt(r.aum)}</td><td>${r.categories.map(catTag).join("")||"-"}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+}
+async function runImport(){
+  if(Number($("map_name").value)<0){showMsg("importMsg","'고객명' 열은 반드시 지정해야 합니다.");return}
+  const skipDup=$("skipDup").checked;
+  const existing=new Set(clients.map(c=>c.name));
+  let rows=importRows.map(mappedRow).filter(r=>r.name);
+  const total=rows.length;
+  let skipped=0;
+  if(skipDup){
+    const before=rows.length;
+    rows=rows.filter(r=>!existing.has(r.name));
+    skipped=before-rows.length;
+  }
+  if(rows.length===0){showMsg("importMsg",`등록할 신규 고객이 없습니다. (중복 제외 ${skipped}건)`);return}
+  if(!confirm(`${rows.length}건을 등록합니다.${skipped?` (중복 ${skipped}건 제외)`:""} 진행할까요?`))return;
+  $("importRunBtn").disabled=true;
+  let done=0, failed=0;
+  for(let i=0;i<rows.length;i+=100){
+    const chunk=rows.slice(i,i+100);
+    const {error}=await db.from("clients").insert(chunk);
+    if(error){failed+=chunk.length;console.error(error)}
+    else{done+=chunk.length}
+    showMsg("importMsg",`진행 중... ${done+failed}/${rows.length}`,true);
+  }
+  $("importRunBtn").disabled=false;
+  await loadAll();
+  showMsg("importMsg",`완료: ${done}건 등록${skipped?`, 중복 ${skipped}건 건너뜀`:""}${failed?`, 실패 ${failed}건`:""}`,!failed);
+  if(!failed)setTimeout(()=>closeModal("importModal"),1800);
 }
 
 /* ---------- 공통 ---------- */
