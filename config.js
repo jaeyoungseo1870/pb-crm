@@ -1,2 +1,2 @@
-const SUPABASE_URL = "https://supabase.com/dashboard/project/hfichookktqygbizjqzy/settings/api-keys";
-const SUPABASE_ANON_KEY = " eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhmaWNob29ra3RxeWdiaXpqcXp5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM3NDc5OTcsImV4cCI6MjA5OTMyMzk5N30.piqV2epvpWliyPSUoH06gDgO8swsa23nyjd9snKJbfs";
+const SUPABASE_URL = "https://hfichookktqygbizjqzy.supabase.co";
+const SUPABASE_ANON_KEY = "여기에_anon_public_키";
