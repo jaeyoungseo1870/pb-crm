@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PB 고객관리시스템</title>
+<style>
+:root{
+  --ink:#1c2b4a; --ink-soft:#3a4a6b; --paper:#f6f7f9; --card:#fff;
+  --line:#e3e6ec; --brass:#a8843c; --brass-soft:#f4ead6; --danger:#c0392b;
+  --pos:#c0392b; --neg:#1f5fbf;
+  --tag-stock:#dbeafe; --tag-stock-t:#1d4ed8;
+  --tag-bond:#dcfce7; --tag-bond-t:#15803d;
+  --tag-ovs:#fef3c7; --tag-ovs-t:#b45309;
+  --tag-els:#fce7f3; --tag-els-t:#be185d;
+  --tag-wrap:#ede9fe; --tag-wrap-t:#6d28d9;
+  --tag-fund:#e0f2fe; --tag-fund-t:#0369a1;
+  --tag-re:#f1f5f9; --tag-re-t:#475569;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",-apple-system,sans-serif}
+body{background:var(--paper);color:var(--ink);font-size:14px}
+header{background:var(--ink);color:#fff;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+header h1{font-size:17px;font-weight:700;letter-spacing:-.3px}
+header .sub{font-size:12px;color:#aeb8cf}
+header .spacer{flex:1}
+header button{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);border-radius:6px;padding:6px 12px;font-size:12px;cursor:pointer}
+header button:hover{background:rgba(255,255,255,.22)}
+nav{background:#fff;border-bottom:1px solid var(--line);display:flex;overflow-x:auto;padding:0 12px}
+nav button{background:none;border:none;padding:13px 16px;font-size:14px;font-weight:600;color:#7a8499;cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap}
+nav button.active{color:var(--ink);border-bottom-color:var(--brass)}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+.auth-wrap{max-width:400px;margin:8vh auto 0;padding:0 16px}
+.hero{text-align:center;margin-bottom:22px}
+.hero .mark{width:56px;height:56px;border-radius:14px;background:var(--ink);color:var(--brass-soft);display:inline-flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin-bottom:12px}
+.hero h1{font-size:22px;letter-spacing:-.5px;margin-bottom:6px}
+.hero p{font-size:13px;color:#7a8499}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+.card .lbl{font-size:12px;color:#7a8499;margin-bottom:6px}
+.card .val{font-size:22px;font-weight:700;letter-spacing:-.5px}
+.card .val small{font-size:12px;font-weight:500;color:#7a8499}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+.panel h2{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.panel h2::before{content:"";width:4px;height:15px;background:var(--brass);border-radius:2px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;padding:9px 10px;background:#f2f4f8;color:#5a6580;font-weight:600;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 10px;border-bottom:1px solid #eef0f4;vertical-align:middle}
+tr:hover td{background:#fafbfd}
+.tag{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin:1px 2px 1px 0}
+.grade{display:inline-block;min-width:34px;text-align:center;padding:2px 6px;border-radius:5px;font-size:11px;font-weight:700}
+.g-VIP{background:var(--brass);color:#fff}.g-A{background:#dce6f7;color:#1d4ed8}.g-B{background:#e8ecf2;color:#475569}.g-C{background:#f4f5f7;color:#8a93a5}
+.pos{color:var(--pos);font-weight:600}.neg{color:var(--neg);font-weight:600}
+.btn{border:none;border-radius:6px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer}
+.btn-p{background:var(--ink);color:#fff}.btn-p:hover{background:#2a3c63}
+.btn-s{background:#eef0f4;color:var(--ink)}.btn-s:hover{background:#e2e6ee}
+.btn-d{background:#fdeceb;color:var(--danger)}
+.btn-sm{padding:4px 9px;font-size:12px}
+.btn-full{width:100%;padding:11px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.toolbar input[type=text],.toolbar select{padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff}
+.toolbar input[type=text]{min-width:170px}
+.modal-bg{position:fixed;inset:0;background:rgba(20,30,55,.45);display:none;align-items:flex-start;justify-content:center;padding:30px 14px;overflow-y:auto;z-index:50}
+.modal-bg.open{display:flex}
+.modal{background:#fff;border-radius:12px;padding:22px;width:100%;max-width:560px}
+.modal h3{font-size:16px;margin-bottom:16px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.frow.full{grid-template-columns:1fr}
+.fg label{display:block;font-size:12px;font-weight:600;color:#5a6580;margin-bottom:4px}
+.fg input,.fg select,.fg textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+.fg input:focus,.fg select:focus{outline:2px solid var(--brass);outline-offset:-1px}
+.fg textarea{resize:vertical;min-height:56px}
+.chkgrp{display:flex;flex-wrap:wrap;gap:6px}
+.chkgrp label{display:flex;align-items:center;gap:4px;font-size:12px;background:#f2f4f8;padding:5px 9px;border-radius:6px;cursor:pointer;border:1px solid transparent}
+.chkgrp label:has(input:checked){background:var(--brass-soft);border-color:var(--brass);color:#7a5c1e;font-weight:600}
+.chkgrp input{accent-color:var(--brass)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.empty{text-align:center;color:#98a1b3;padding:32px 0;font-size:13px}
+.due{background:#fff7ed !important}
+.due-badge{background:#ffedd5;color:#c2570c;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.ok-badge{background:#e8f5ec;color:#2e7d46;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700}
+.bar{height:8px;background:#eef0f4;border-radius:4px;overflow:hidden}
+.bar>div{height:100%;background:var(--brass)}
+.mini{font-size:12px;color:#7a8499}
+.clickable{cursor:pointer;color:#1d4ed8;font-weight:600}
+.msg{padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none}
+.msg.err{display:block;background:#fdeceb;color:var(--danger)}
+.msg.ok{display:block;background:#e8f5ec;color:#2e7d46}
+.switch{text-align:center;margin-top:14px;font-size:13px;color:#7a8499}
+.switch a{color:var(--brass);font-weight:700;cursor:pointer}
+.notice{font-size:12px;color:#98a1b3;line-height:1.6;margin-top:10px}
+#loading{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:100;font-size:14px;color:#7a8499}
+@media(max-width:640px){.frow{grid-template-columns:1fr}th,td{padding:7px 6px;font-size:12px}}
+@media(max-width:760px){.dash-grid{grid-template-columns:1fr !important}}
+</style>
+</head>
+<body>
+<div id="loading">불러오는 중...</div>
+
+<!-- ===== 로그인 / 회원가입 ===== -->
+<div id="authView" class="auth-wrap" style="display:none">
+  <div class="hero">
+    <div class="mark">PB</div>
+    <h1>PB 고객관리시스템</h1>
+    <p>팀원 전용 · 최대 3명 가입</p>
+  </div>
+  <div class="panel" id="loginPanel">
+    <h2>로그인</h2>
+    <div class="msg" id="loginMsg"></div>
+    <div class="frow full"><div class="fg"><label>이메일</label><input id="l_email" type="email" autocomplete="username"></div></div>
+    <div class="frow full"><div class="fg"><label>비밀번호</label><input id="l_pw" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()"></div></div>
+    <button class="btn btn-p btn-full" onclick="login()">로그인</button>
+    <div class="switch">계정이 없나요? <a onclick="showAuth('signup')">회원가입</a></div>
+  </div>
+  <div class="panel" id="signupPanel" style="display:none">
+    <h2>회원가입</h2>
+    <div class="msg" id="signupMsg"></div>
+    <div class="frow full"><div class="fg"><label>이름 *</label><input id="s_name" placeholder="예: 서재영"></div></div>
+    <div class="frow full"><div class="fg"><label>이메일 *</label><input id="s_email" type="email"></div></div>
+    <div class="frow full"><div class="fg"><label>비밀번호 * (6자 이상)</label><input id="s_pw" type="password"></div></div>
+    <button class="btn btn-p btn-full" onclick="signup()">가입하기</button>
+    <div class="switch">이미 계정이 있나요? <a onclick="showAuth('login')">로그인</a></div>
+    <p class="notice">※ 실제 은행·증권 계정에 쓰는 비밀번호는 사용하지 마세요.</p>
+  </div>
+</div>
+
+<!-- ===== 앱 화면 ===== -->
+<div id="appView" style="display:none">
+  <header>
+    <div>
+      <h1>PB 고객관리시스템</h1>
+      <div class="sub" id="teamSub">팀 공유 데이터베이스</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="sub" id="whoami"></span>
+    <button onclick="loadAll(true)">↻ 새로고침</button>
+    <button onclick="logout()">로그아웃</button>
+  </header>
+  <nav>
+    <button class="active" data-tab="dash" onclick="showTab('dash')">대시보드</button>
+    <button data-tab="clients" onclick="showTab('clients')">고객관리</button>
+    <button data-tab="returns" onclick="showTab('returns')">수익률관리</button>
+    <button data-tab="wrap" onclick="showTab('wrap')">랩고객</button>
+    <button data-tab="prospects" onclick="showTab('prospects')">잠재고객</button>
+  </nav>
+  <main>
+    <section id="tab-dash"></section>
+    <section id="tab-clients" style="display:none"></section>
+    <section id="tab-returns" style="display:none"></section>
+    <section id="tab-wrap" style="display:none"></section>
+    <section id="tab-prospects" style="display:none"></section>
+  </main>
+</div>
+
+<!-- 고객 등록/수정 -->
+<div class="modal-bg" id="clientModal">
+  <div class="modal">
+    <h3 id="clientModalTitle">고객 등록</h3>
+    <input type="hidden" id="c_id">
+    <div class="frow">
+      <div class="fg"><label>고객명 *</label><input id="c_name"></div>
+      <div class="fg"><label>구분</label><select id="c_type"><option>개인</option><option>법인</option></select></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>패밀리 그룹</label><input id="c_family" placeholder="예: 김OO 패밀리"></div>
+      <div class="fg"><label>담당자</label><select id="c_manager"></select></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>등급</label><select id="c_grade"><option>VIP</option><option>A</option><option>B</option><option>C</option></select></div>
+      <div class="fg"><label>AUM (백만원)</label><input id="c_aum" type="number" min="0"></div>
+    </div>
+    <div class="frow full">
+      <div class="fg"><label>투자 유형 (복수 선택)</label><div class="chkgrp" id="c_cats"></div></div>
+    </div>
+    <div class="frow full" id="wrapFields" style="display:none">
+      <div class="fg"><label>랩 운용펀드 정보</label>
+        <div class="frow" style="margin-bottom:0">
+          <input id="c_wrapFund" placeholder="운용펀드명">
+          <input id="c_wrapCompany" placeholder="운용사">
+        </div>
+        <div class="frow" style="margin:8px 0 0">
+          <input id="c_wrapAmount" type="number" min="0" placeholder="계약금액(백만원)">
+          <input id="c_wrapDate" type="date" title="계약일">
+        </div>
+      </div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>연락처</label><input id="c_phone"></div>
+      <div class="fg"><label>이메일</label><input id="c_email"></div>
+    </div>
+    <div class="frow full"><div class="fg"><label>메모</label><textarea id="c_memo"></textarea></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('clientModal')">취소</button>
+      <button class="btn btn-p" onclick="saveClient()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 수익률 입력 -->
+<div class="modal-bg" id="returnModal">
+  <div class="modal">
+    <h3>수익률 입력 — <span id="r_clientName"></span></h3>
+    <input type="hidden" id="r_clientId">
+    <div class="frow">
+      <div class="fg"><label>기준일 *</label><input id="r_date" type="date"></div>
+      <div class="fg"><label>수익률 (%) *</label><input id="r_rate" type="number" step="0.01" placeholder="예: 3.25"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>평가금액 (백만원)</label><input id="r_value" type="number" min="0"></div>
+      <div class="fg"><label>메모</label><input id="r_memo" placeholder="리밸런싱, 시황 등"></div>
+    </div>
+    <div id="r_history" style="max-height:220px;overflow-y:auto;margin-top:8px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('returnModal')">닫기</button>
+      <button class="btn btn-p" onclick="saveReturn()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 잠재고객 등록/수정 -->
+<div class="modal-bg" id="prospectModal">
+  <div class="modal">
+    <h3 id="prospectModalTitle">잠재고객 등록</h3>
+    <input type="hidden" id="p_id">
+    <div class="frow">
+      <div class="fg"><label>이름 *</label><input id="p_name"></div>
+      <div class="fg"><label>담당자</label><select id="p_manager"></select></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>예상자산 (백만원)</label><input id="p_asset" type="number" min="0"></div>
+      <div class="fg"><label>접촉 주기</label><select id="p_cycle"><option value="7">주간</option><option value="30" selected>월간</option><option value="90">분기</option></select></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>최근 접촉일</label><input id="p_last" type="date"></div>
+      <div class="fg"><label>유입 경로</label><input id="p_source" placeholder="소개, 세미나, 지점 등"></div>
+    </div>
+    <div class="frow full">
+      <div class="fg"><label>관심 유형</label><div class="chkgrp" id="p_cats"></div></div>
+    </div>
+    <div class="frow full"><div class="fg"><label>메모</label><textarea id="p_memo"></textarea></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('prospectModal')">취소</button>
+      <button class="btn btn-p" onclick="saveProspect()">저장</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
