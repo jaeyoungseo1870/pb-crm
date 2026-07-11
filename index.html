@@ -244,6 +244,33 @@ tr:hover td{background:#fafbfd}
   </div>
 </div>
 
+<!-- 랩 편입종목 관리 -->
+<div class="modal-bg" id="holdModal">
+  <div class="modal" style="max-width:860px">
+    <h3>랩 편입종목 — <span id="h_clientName"></span></h3>
+    <input type="hidden" id="h_clientId">
+    <div class="toolbar" style="align-items:flex-end">
+      <div class="fg"><label>기준일</label><input id="h_date" type="date" onchange="renderHoldings()" style="padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px"></div>
+      <div id="h_dates" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      <div style="flex:1"></div>
+      <button class="btn btn-s" onclick="copyPrevHoldings()">직전 기준일 종목 복사</button>
+    </div>
+    <div class="frow" style="grid-template-columns:1.4fr 1fr 0.8fr 1fr 0.9fr 1.4fr auto;gap:6px;align-items:end">
+      <div class="fg"><label>종목명 *</label><input id="hi_name" placeholder="삼성전자"></div>
+      <div class="fg"><label>종목코드</label><input id="hi_code" placeholder="005930"></div>
+      <div class="fg"><label>비중(%)</label><input id="hi_weight" type="number" step="0.1"></div>
+      <div class="fg"><label>평가금액(백만)</label><input id="hi_value" type="number" step="0.1"></div>
+      <div class="fg"><label>수익률(%)</label><input id="hi_rate" type="number" step="0.01"></div>
+      <div class="fg"><label>메모</label><input id="hi_memo" placeholder="신규 편입 등" onkeydown="if(event.key==='Enter')addHolding()"></div>
+      <button class="btn btn-p" style="height:34px" onclick="addHolding()">추가</button>
+    </div>
+    <div id="h_table" style="margin-top:12px;max-height:340px;overflow-y:auto"></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('holdModal')">닫기</button>
+    </div>
+  </div>
+</div>
+
 <!-- Excel 업로드 -->
 <div class="modal-bg" id="importModal">
   <div class="modal" style="max-width:760px">
