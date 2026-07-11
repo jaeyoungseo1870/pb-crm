@@ -118,7 +118,7 @@ function renderDash(){
   $("tab-dash").innerHTML = `
   <div class="cards">
     <div class="card"><div class="lbl">총 고객</div><div class="val">${clients.length}<small>명</small></div></div>
-    <div class="card"><div class="lbl">총 AUM</div><div class="val">${fmt(totalAum)}<small>백만원</small></div></div>
+    <div class="card"><div class="lbl">총 자산</div><div class="val">${fmt(totalAum)}<small>억원</small></div></div>
     <div class="card"><div class="lbl">패밀리 그룹</div><div class="val">${fams.length}<small>개</small></div></div>
     <div class="card"><div class="lbl">랩 고객</div><div class="val">${clients.filter(c=>(c.categories||[]).includes("랩")).length}<small>명</small></div></div>
     <div class="card"><div class="lbl">잠재고객</div><div class="val">${prospects.length}<small>명</small></div></div>
@@ -131,7 +131,7 @@ function renderDash(){
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
     <div class="panel"><h2>담당자별 현황</h2>
-      <table><thead><tr><th>담당자</th><th>고객수</th><th>AUM(백만원)</th></tr></thead><tbody>
+      <table><thead><tr><th>담당자</th><th>고객수</th><th>자산(억원)</th></tr></thead><tbody>
       ${byMgr.map(x=>`<tr><td>${esc(x.m)}</td><td>${x.n}</td><td>${fmt(x.aum)}</td></tr>`).join("")||'<tr><td colspan="3"><div class="empty">팀원이 가입하면 표시됩니다</div></td></tr>'}
       </tbody></table>
     </div>
@@ -183,7 +183,7 @@ function renderClients(){
     <button class="btn btn-p" onclick="openClientModal()">+ 고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>구분</th><th>등급</th><th>패밀리</th><th>유형</th><th>담당자</th><th>AUM(백만)</th><th>최근수익률</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>등급</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>최근수익률</th><th></th></tr></thead><tbody>
     ${list.length?list.map(c=>{const r=lastReturn(c.id);return `<tr>
       <td><b>${esc(c.name)}</b>${c.memo?`<div class="mini">${esc(c.memo).slice(0,30)}</div>`:""}</td>
       <td>${c.type||"-"}</td>
@@ -227,7 +227,7 @@ function renderFamily(){
   const members=familyMembers(hid);
   $("f_list").innerHTML=members.length?`
     <p class="mini" style="margin-bottom:6px">연결된 패밀리 고객 (${members.length}명)</p>
-    <table><thead><tr><th>이름</th><th>구분</th><th>담당자</th><th>AUM(백만)</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>이름</th><th>구분</th><th>담당자</th><th>자산(억원)</th><th></th></tr></thead><tbody>
     ${members.map(m=>`<tr>
       <td><b>${esc(m.name)}</b></td><td>${m.type||"-"}</td><td>${esc(m.manager||"-")}</td><td>${fmt(m.aum)}</td>
       <td><button class="btn btn-d btn-sm" onclick="unlinkFamily('${m.id}')">연결해제</button></td>
@@ -333,7 +333,7 @@ function renderReturns(){
   });
   $("tab-returns").innerHTML=`
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>AUM(백만)</th><th>최근 기준일</th><th>수익률</th><th>평가금액(백만)</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익률</th><th>평가금액(백만)</th><th>상태</th><th></th></tr></thead><tbody>
     ${cs.length?cs.map(c=>{
       const r=lastReturn(c.id);
       const stale=!r||((new Date(t)-new Date(r.base_date))>1000*60*60*24*30);
@@ -652,7 +652,7 @@ const IMPORT_FIELDS = [
   {key:"family",    label:"패밀리 그룹",          hints:["패밀리","가족","패밀리그룹","family"]},
   {key:"manager",   label:"담당자",               hints:["담당자","담당","pb","rm"]},
   {key:"grade",     label:"등급",                 hints:["등급","grade","고객등급"]},
-  {key:"aum",       label:"AUM(백만원)",          hints:["aum","자산","금액","평가금액","잔고","예탁"]},
+  {key:"aum",       label:"자산(억원)",          hints:["aum","자산","금액","평가금액","잔고","예탁"]},
   {key:"phone",     label:"연락처",               hints:["연락처","전화","휴대폰","핸드폰","hp","tel"]},
   {key:"email",     label:"이메일",               hints:["이메일","메일","email","e-mail"]},
   {key:"categories",label:"투자유형(쉼표 구분)",  hints:["유형","투자유형","카테고리","관심","상품"]},
@@ -727,7 +727,7 @@ function renderImportPreview(){
   const sample=importRows.slice(0,5).map(mappedRow);
   $("importPreview").innerHTML=`
     <p class="mini" style="margin-bottom:6px">미리보기 (상위 5건) — 이렇게 등록됩니다:</p>
-    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>담당자</th><th>등급</th><th>AUM</th><th>유형</th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>담당자</th><th>등급</th><th>자산(억원)</th><th>유형</th></tr></thead><tbody>
     ${sample.map(r=>`<tr>
       <td>${r.name?`<b>${esc(r.name)}</b>`:'<span style="color:#c0392b">비어있음!</span>'}</td>
       <td>${r.type}</td><td>${esc(r.family||"-")}</td><td>${esc(r.manager)}</td>
