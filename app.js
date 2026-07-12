@@ -565,13 +565,14 @@ function renderProspects(){
     <button class="btn btn-p" onclick="openProspectModal()">+ 잠재고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>이름</th><th>담당자</th><th>예상자산(백만)</th><th>관심유형</th><th>주기</th><th>최근접촉</th><th>다음접촉</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>이름</th><th>연락처</th><th>이메일</th><th>담당자</th><th>예상자산(백만)</th><th>관심유형</th><th>주기</th><th>최근접촉</th><th>다음접촉</th><th>상태</th><th></th></tr></thead><tbody>
     ${list.length?list.map(p=>{
       const nc=nextContact(p);
       const due=!p.last_contact||(nc&&nc<=t);
       const cyc={7:"주간",30:"월간",90:"분기"}[p.cycle]||"월간";
       return `<tr class="${due?"due":""}">
         <td><b>${esc(p.name)}</b>${p.source?`<div class="mini">${esc(p.source)}</div>`:""}</td>
+        <td>${esc(p.phone||"-")}</td><td>${esc(p.email||"-")}</td>
         <td>${esc(p.manager||"-")}</td><td>${fmt(p.expected_asset)}</td>
         <td>${(p.interests||[]).map(catTag).join("")||"-"}</td>
         <td>${cyc}</td><td>${p.last_contact||"-"}</td><td>${nc||"-"}</td>
@@ -581,7 +582,7 @@ function renderProspects(){
           <button class="btn btn-s btn-sm" onclick="openProspectModal('${p.id}')">수정</button>
           <button class="btn btn-s btn-sm" onclick="convertProspect('${p.id}')">고객전환</button>
           <button class="btn btn-d btn-sm" onclick="delProspect('${p.id}')">삭제</button>
-        </td></tr>`}).join(""):'<tr><td colspan="9"><div class="empty">등록된 잠재고객이 없습니다</div></td></tr>'}
+        </td></tr>`}).join(""):'<tr><td colspan="11"><div class="empty">등록된 잠재고객이 없습니다</div></td></tr>'}
     </tbody></table>
   </div>`;
 }
@@ -591,6 +592,8 @@ function openProspectModal(id){
   $("p_id").value=p?p.id:"";
   $("p_name").value=p?p.name:"";
   $("p_manager").innerHTML=mgrOptions(p?p.manager:me.name);
+  $("p_phone").value=p?(p.phone||""):"";
+  $("p_email").value=p?(p.email||""):"";
   $("p_asset").value=p?(p.expected_asset??""):"";
   $("p_cycle").value=p?(p.cycle||30):30;
   $("p_last").value=p?(p.last_contact||""):"";
@@ -605,6 +608,8 @@ async function saveProspect(){
   const id=$("p_id").value;
   const row={
     name, manager:$("p_manager").value,
+    phone:$("p_phone").value.trim()||null,
+    email:$("p_email").value.trim()||null,
     expected_asset:$("p_asset").value===""?null:Number($("p_asset").value),
     cycle:Number($("p_cycle").value),
     last_contact:$("p_last").value||null,
@@ -628,6 +633,7 @@ async function convertProspect(id){
   if(!confirm(`'${p.name}' 잠재고객을 정식 고객으로 전환할까요?`))return;
   const {error:e1}=await db.from("clients").insert({
     name:p.name, type:"개인", manager:p.manager, grade:"C",
+    phone:p.phone||null, email:p.email||null,
     aum:p.expected_asset, categories:p.interests||[],
     memo:(p.memo?p.memo+" / ":"")+"잠재고객 전환("+today()+")"
   });
