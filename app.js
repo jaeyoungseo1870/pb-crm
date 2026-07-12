@@ -572,7 +572,7 @@ function renderProspects(){
       const cyc={7:"주간",30:"월간",90:"분기"}[p.cycle]||"월간";
       return `<tr class="${due?"due":""}">
         <td><b>${esc(p.name)}</b>${p.source?`<div class="mini">${esc(p.source)}</div>`:""}</td>
-        <td>${esc(p.company||"-")}</td>
+        <td style="white-space:nowrap">${esc(p.company||"-")}</td>
         <td>${esc(p.phone||"-")}</td><td>${esc(p.email||"-")}</td>
         <td>${esc(p.manager||"-")}</td><td>${fmt(p.expected_asset)}</td>
         <td>${(p.interests||[]).map(catTag).join("")||"-"}</td>
