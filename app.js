@@ -203,6 +203,56 @@ function renderClients(){
   </div>`;
 }
 
+/* ---------- 잠재고객 메시지 보내기 ---------- */
+const MSG_TPL_KEY="pbcrm-msg-template";
+const DEFAULT_TPL="{이름} 님, 안녕하세요.\n서재영입니다.\n\n{회사명} 관련하여 도움이 될 만한 자료가 있어 연락드립니다.\n편하신 시간에 잠시 통화 가능하실까요?\n\n감사합니다.";
+let _msgs=[];
+function openMsgModal(pid){
+  let saved=null;
+  try{saved=localStorage.getItem(MSG_TPL_KEY)}catch(e){}
+  $("m_template").value=saved||DEFAULT_TPL;
+  $("m_recipients").innerHTML=prospects.map(p=>
+    `<label><input type="checkbox" value="${p.id}" ${pid===p.id?"checked":""}>${esc(p.name)}${p.company?" · "+esc(p.company):""}${p.phone?"":" (연락처없음)"}</label>`
+  ).join("")||'<span class="mini">등록된 잠재고객이 없습니다</span>';
+  $("m_out").innerHTML="";
+  $("msgModal").classList.add("open");
+}
+function msgSelectAll(on){
+  document.querySelectorAll("#m_recipients input").forEach(i=>i.checked=on);
+}
+function personalize(tpl,p){
+  return tpl.split("{이름}").join(p.name).split("{회사명}").join(p.company||"");
+}
+function generateMessages(){
+  const tpl=$("m_template").value;
+  try{localStorage.setItem(MSG_TPL_KEY,tpl)}catch(e){}
+  const ids=[...document.querySelectorAll("#m_recipients input:checked")].map(i=>i.value);
+  if(!ids.length){alert("받는 사람을 선택하세요.");return}
+  const sel=prospects.filter(p=>ids.includes(p.id));
+  _msgs=sel.map(p=>personalize(tpl,p));
+  $("m_out").innerHTML=sel.map((p,i)=>{
+    const text=_msgs[i];
+    const sms=p.phone?`<a class="btn btn-s btn-sm" style="text-decoration:none" href="sms:${(p.phone||"").replace(/[^0-9+]/g,"")}${text?"?body="+encodeURIComponent(text):""}">문자</a>`:"";
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <b>${esc(p.name)}</b><span class="mini">${esc(p.company||"")} ${esc(p.phone||"연락처 없음")}</span>
+        <div style="flex:1"></div>
+        <button class="btn btn-p btn-sm" id="cpbtn_${i}" onclick="copyMsg(${i})">복사</button>${sms}
+      </div>
+      <div class="mini" style="white-space:pre-wrap;color:var(--ink)">${esc(text)}</div>
+    </div>`;
+  }).join("");
+}
+async function copyMsg(i){
+  try{
+    await navigator.clipboard.writeText(_msgs[i]);
+    const b=$("cpbtn_"+i); b.textContent="복사됨 ✓"; b.style.background="#2e7d46";
+    setTimeout(()=>{b.textContent="복사"; b.style.background="";},1500);
+  }catch(e){
+    prompt("자동 복사가 안 되는 환경입니다. 아래 내용을 직접 복사하세요:",_msgs[i]);
+  }
+}
+
 /* ---------- 패밀리 고객 관리 ---------- */
 function openFamilyModal(cid){
   const c=clients.find(x=>x.id===cid);if(!c)return;
@@ -562,6 +612,7 @@ function renderProspects(){
   <div class="toolbar">
     <span class="mini">접촉 예정일이 지난 고객은 강조 표시됩니다.</span>
     <div style="flex:1"></div>
+    <button class="btn btn-s" onclick="openMsgModal()">✉ 메시지 보내기</button>
     <button class="btn btn-p" onclick="openProspectModal()">+ 잠재고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
@@ -579,6 +630,7 @@ function renderProspects(){
         <td>${cyc}</td><td>${p.last_contact||"-"}</td><td>${nc||"-"}</td>
         <td>${due?'<span class="due-badge">접촉 필요</span>':'<span class="ok-badge">양호</span>'}</td>
         <td style="white-space:nowrap">
+          <button class="btn btn-s btn-sm" onclick="openMsgModal('${p.id}')">메시지</button>
           <button class="btn btn-p btn-sm" onclick="contactNow('${p.id}')">접촉완료</button>
           <button class="btn btn-s btn-sm" onclick="openProspectModal('${p.id}')">수정</button>
           <button class="btn btn-s btn-sm" onclick="convertProspect('${p.id}')">고객전환</button>
