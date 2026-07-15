@@ -80,13 +80,28 @@ async function enter(user){
 }
 
 /* ---------- 데이터 로드 ---------- */
+/* ---------- 데이터 로드(전체 페이징) ---------- */
+async function fetchAll(table, orderCol){
+  // Supabase는 요청당 최대 1,000건만 반환하므로 1,000건씩 반복해서 전부 가져온다
+  let all=[], from=0; const size=1000;
+  while(true){
+    let q=db.from(table).select("*").range(from, from+size-1);
+    if(orderCol) q=q.order(orderCol,{ascending:true});
+    const {data,error}=await q;
+    if(error) return {data:all,error};
+    all=all.concat(data||[]);
+    if(!data || data.length<size) break;
+    from+=size;
+  }
+  return {data:all,error:null};
+}
 async function loadAll(manual){
   const [p,c,r,s,h] = await Promise.all([
     db.from("profiles").select("name").order("created_at"),
-    db.from("clients").select("*").order("created_at"),
-    db.from("returns").select("*"),
-    db.from("prospects").select("*").order("created_at"),
-    db.from("holdings").select("*"),
+    fetchAll("clients","created_at"),
+    fetchAll("returns",null),
+    fetchAll("prospects","created_at"),
+    fetchAll("holdings",null),
   ]);
   if(p.error||c.error||r.error||s.error){err(p.error||c.error||r.error||s.error);return}
   managers = p.data.map(x=>x.name);
