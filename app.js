@@ -460,7 +460,8 @@ function wrapRate(w){
   return (v/a-1)*100;
 }
 function renderWrap(){
-  const list=clients.filter(c=>(c.categories||[]).includes("랩"));
+  const list=clients.filter(c=>(c.categories||[]).includes("랩"))
+    .sort((a,b)=>((a.wrap&&a.wrap.date)||"9999-99-99").localeCompare((b.wrap&&b.wrap.date)||"9999-99-99"));
   const t=today();
   $("tab-wrap").innerHTML=`
   <div class="toolbar">
