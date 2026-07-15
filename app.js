@@ -490,6 +490,7 @@ function renderWrap(){
         <button class="btn btn-p btn-sm" onclick="openWrapModal('${c.id}')">랩정보</button>
         <button class="btn btn-p btn-sm" onclick="openHoldModal('${c.id}')">편입종목</button>
         <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익이력</button>
+        <button class="btn btn-d btn-sm" onclick="delClient('${c.id}')">삭제</button>
       </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">아직 랩고객이 없습니다. \'+ 랩고객 등록\' 버튼으로 시작하세요.<br>(기존 고객은 고객관리에서 수정 → 유형에 \'랩\' 체크)</div></td></tr>'}
     </tbody></table>
   </div>
