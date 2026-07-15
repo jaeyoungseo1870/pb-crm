@@ -183,11 +183,10 @@ function renderClients(){
     <button class="btn btn-p" onclick="openClientModal()">+ 고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>구분</th><th>등급</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>최근수익률</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>수익</th><th></th></tr></thead><tbody>
     ${list.length?list.map(c=>{const r=lastReturn(c.id);return `<tr>
       <td><b>${esc(c.name)}</b>${c.memo?`<div class="mini">${esc(c.memo).slice(0,30)}</div>`:""}</td>
       <td>${c.type||"-"}</td>
-      <td><span class="grade g-${c.grade||"C"}">${c.grade||"-"}</span></td>
       <td>${familyCell(c)}</td>
       <td>${(c.categories||[]).map(catTag).join("")||"-"}</td>
       <td>${esc(c.manager||"-")}</td>
@@ -198,7 +197,7 @@ function renderClients(){
         <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
         <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률</button>
         <button class="btn btn-d btn-sm" onclick="delClient('${c.id}')">삭제</button>
-      </td></tr>`}).join(""):'<tr><td colspan="9"><div class="empty">조건에 맞는 고객이 없습니다</div></td></tr>'}
+      </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">조건에 맞는 고객이 없습니다</div></td></tr>'}
     </tbody></table>
   </div>`;
 }
@@ -334,7 +333,6 @@ function openClientModal(id,presetWrap){
   $("c_type").value=c?c.type:"개인";
   $("c_family").value=c?(c.family||""):"";
   $("c_manager").innerHTML=mgrOptions(c?c.manager:me.name);
-  $("c_grade").value=c?(c.grade||"B"):"B";
   $("c_aum").value=c?(c.aum??""):"";
   $("c_phone").value=c?(c.phone||""):"";
   $("c_email").value=c?(c.email||""):"";
@@ -354,7 +352,7 @@ async function saveClient(){
   const cats=[...document.querySelectorAll("#c_cats input:checked")].map(i=>i.value);
   const row={
     name, type:$("c_type").value, family:$("c_family").value.trim()||null,
-    manager:$("c_manager").value, grade:$("c_grade").value,
+    manager:$("c_manager").value,
     aum:$("c_aum").value===""?null:Number($("c_aum").value),
     phone:$("c_phone").value.trim()||null, email:$("c_email").value.trim()||null,
     memo:$("c_memo").value.trim()||null, categories:cats,
@@ -712,7 +710,6 @@ const IMPORT_FIELDS = [
   {key:"type",      label:"구분(개인/법인)",      hints:["구분","개인/법인","법인여부"]},
   {key:"family",    label:"패밀리 그룹",          hints:["패밀리","가족","패밀리그룹","family"]},
   {key:"manager",   label:"담당자",               hints:["담당자","담당","pb","rm"]},
-  {key:"grade",     label:"등급",                 hints:["등급","grade","고객등급"]},
   {key:"aum",       label:"자산(억원)",          hints:["aum","자산","금액","평가금액","잔고","예탁"]},
   {key:"phone",     label:"연락처",               hints:["연락처","전화","휴대폰","핸드폰","hp","tel"]},
   {key:"email",     label:"이메일",               hints:["이메일","메일","email","e-mail"]},
@@ -775,7 +772,6 @@ function mappedRow(r){
   const t=get("type"); row.type=t.includes("법")?"법인":"개인";
   row.family=get("family")||null;
   row.manager=get("manager")||me.name;
-  const g=get("grade").toUpperCase(); row.grade=["VIP","A","B","C"].includes(g)?g:"B";
   const a=get("aum").replace(/[,\s원]/g,""); row.aum=a===""||isNaN(Number(a))?null:Number(a);
   row.phone=get("phone")||null;
   row.email=get("email")||null;
@@ -788,11 +784,11 @@ function renderImportPreview(){
   const sample=importRows.slice(0,5).map(mappedRow);
   $("importPreview").innerHTML=`
     <p class="mini" style="margin-bottom:6px">미리보기 (상위 5건) — 이렇게 등록됩니다:</p>
-    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>담당자</th><th>등급</th><th>자산(억원)</th><th>유형</th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>담당자</th><th>자산(억원)</th><th>유형</th></tr></thead><tbody>
     ${sample.map(r=>`<tr>
       <td>${r.name?`<b>${esc(r.name)}</b>`:'<span style="color:#c0392b">비어있음!</span>'}</td>
       <td>${r.type}</td><td>${esc(r.family||"-")}</td><td>${esc(r.manager)}</td>
-      <td>${r.grade}</td><td>${fmt(r.aum)}</td><td>${r.categories.map(catTag).join("")||"-"}</td>
+      <td>${fmt(r.aum)}</td><td>${r.categories.map(catTag).join("")||"-"}</td>
     </tr>`).join("")}
     </tbody></table>`;
 }
