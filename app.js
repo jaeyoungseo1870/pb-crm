@@ -18,6 +18,7 @@ function fmt(n){return n==null||n===""?"-":Number(n).toLocaleString("ko-KR")}
 function today(){return new Date().toISOString().slice(0,10)}
 function catTag(c){const s=CAT_STYLE[c]||["--tag-re","--tag-re-t"];return `<span class="tag" style="background:var(${s[0]});color:var(${s[1]})">${c}</span>`}
 function rateHtml(r){if(r==null)return"-";const n=Number(r);return `<span class="${n>=0?"pos":"neg"}">${n>=0?"+":""}${n.toFixed(2)}%</span>`}
+function amtHtml(r){if(r==null)return"-";const n=Number(r);return `<b>${n.toLocaleString("ko-KR",{maximumFractionDigits:2})}</b>`}
 function clientReturns(cid){return returns.filter(r=>r.client_id===cid).sort((a,b)=>b.base_date.localeCompare(a.base_date))}
 function lastReturn(cid){const rs=clientReturns(cid);return rs.length?rs[0]:null}
 function nextContact(p){if(!p.last_contact)return null;const d=new Date(p.last_contact);d.setDate(d.getDate()+Number(p.cycle||30));return d.toISOString().slice(0,10)}
@@ -126,7 +127,7 @@ function renderDash(){
   <div class="panel"><h2>오늘 할 일</h2>
     ${dueP.length===0&&staleR.length===0&&staleH.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
     ${dueP.length?`<p style="margin-bottom:8px"><span class="due-badge">접촉 필요</span> <b>${dueP.length}명</b>의 잠재고객 — ${dueP.slice(0,5).map(p=>esc(p.name)).join(", ")}${dueP.length>5?" 외":""} <span class="clickable" onclick="showTab('prospects')">→ 이동</span></p>`:""}
-    ${staleR.length?`<p style="margin-bottom:8px"><span class="due-badge">수익률 갱신</span> 30일 이상 미입력 <b>${staleR.length}명</b> — ${staleR.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleR.length>5?" 외":""} <span class="clickable" onclick="showTab('returns')">→ 이동</span></p>`:""}
+    ${staleR.length?`<p style="margin-bottom:8px"><span class="due-badge">수익 갱신</span> 30일 이상 미입력 <b>${staleR.length}명</b> — ${staleR.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleR.length>5?" 외":""} <span class="clickable" onclick="showTab('returns')">→ 이동</span></p>`:""}
     ${staleH.length?`<p><span class="due-badge">편입종목 갱신</span> 랩고객 <b>${staleH.length}명</b> — ${staleH.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleH.length>5?" 외":""} <span class="clickable" onclick="showTab('wrap')">→ 이동</span></p>`:""}`}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
@@ -183,7 +184,7 @@ function renderClients(){
     <button class="btn btn-p" onclick="openClientModal()">+ 고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>수익</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>수익(억원)</th><th></th></tr></thead><tbody>
     ${list.length?list.map(c=>{const r=lastReturn(c.id);return `<tr>
       <td><b>${esc(c.name)}</b>${c.memo?`<div class="mini">${esc(c.memo).slice(0,30)}</div>`:""}</td>
       <td>${c.type||"-"}</td>
@@ -191,11 +192,11 @@ function renderClients(){
       <td>${(c.categories||[]).map(catTag).join("")||"-"}</td>
       <td>${esc(c.manager||"-")}</td>
       <td>${fmt(c.aum)}</td>
-      <td>${r?rateHtml(r.rate)+`<div class="mini">${r.base_date}</div>`:'<span class="mini">미입력</span>'}</td>
+      <td>${r?amtHtml(r.rate)+`<div class="mini">${r.base_date}</div>`:'<span class="mini">미입력</span>'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-s btn-sm" onclick="openFamilyModal('${c.id}')">패밀리</button>
         <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
-        <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률</button>
+        <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익</button>
         <button class="btn btn-d btn-sm" onclick="delClient('${c.id}')">삭제</button>
       </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">조건에 맞는 고객이 없습니다</div></td></tr>'}
     </tbody></table>
@@ -366,7 +367,7 @@ async function saveClient(){
 }
 async function delClient(id){
   const c=clients.find(x=>x.id===id);
-  if(!confirm(`'${c.name}' 고객을 삭제할까요? 수익률 이력도 함께 삭제됩니다.`))return;
+  if(!confirm(`'${c.name}' 고객을 삭제할까요? 수익 이력도 함께 삭제됩니다.`))return;
   const {error}=await db.from("clients").delete().eq("id",id);
   if(error){err(error);return}
   await loadAll();
@@ -381,13 +382,13 @@ function renderReturns(){
   });
   $("tab-returns").innerHTML=`
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익률</th><th>평가금액(백만)</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익(억원)</th><th>평가금액(백만)</th><th>상태</th><th></th></tr></thead><tbody>
     ${cs.length?cs.map(c=>{
       const r=lastReturn(c.id);
       const stale=!r||((new Date(t)-new Date(r.base_date))>1000*60*60*24*30);
       return `<tr class="${stale?"due":""}">
         <td><b>${esc(c.name)}</b></td><td>${esc(c.manager||"-")}</td><td>${fmt(c.aum)}</td>
-        <td>${r?r.base_date:"-"}</td><td>${r?rateHtml(r.rate):"-"}</td><td>${r?fmt(r.value):"-"}</td>
+        <td>${r?r.base_date:"-"}</td><td>${r?amtHtml(r.rate):"-"}</td><td>${r?fmt(r.value):"-"}</td>
         <td>${stale?'<span class="due-badge">갱신 필요</span>':'<span class="ok-badge">최신</span>'}</td>
         <td><button class="btn btn-p btn-sm" onclick="openReturnModal('${c.id}')">입력/이력</button></td>
       </tr>`}).join(""):'<tr><td colspan="8"><div class="empty">고객을 먼저 등록하세요</div></td></tr>'}
@@ -407,15 +408,15 @@ function openReturnModal(id){
 function renderReturnHistory(cid){
   const rows=clientReturns(cid);
   $("r_history").innerHTML=rows.length?`
-    <table><thead><tr><th>기준일</th><th>수익률</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>
-    ${rows.map(r=>`<tr><td>${r.base_date}</td><td>${rateHtml(r.rate)}</td><td>${fmt(r.value)}</td><td class="mini">${esc(r.memo||"")}</td>
+    <table><thead><tr><th>기준일</th><th>수익(억원)</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.base_date}</td><td>${amtHtml(r.rate)}</td><td>${fmt(r.value)}</td><td class="mini">${esc(r.memo||"")}</td>
     <td><button class="btn btn-d btn-sm" onclick="delReturn('${r.id}','${cid}')">삭제</button></td></tr>`).join("")}
     </tbody></table>`:'<div class="empty">입력된 이력이 없습니다</div>';
 }
 async function saveReturn(){
   const cid=$("r_clientId").value;
   const base_date=$("r_date").value, rate=$("r_rate").value;
-  if(!base_date||rate===""){alert("기준일과 수익률을 입력하세요.");return}
+  if(!base_date||rate===""){alert("기준일과 수익을 입력하세요.");return}
   const {error}=await db.from("returns").insert({
     client_id:cid, base_date, rate:Number(rate),
     value:$("r_value").value===""?null:Number($("r_value").value),
@@ -472,7 +473,7 @@ function renderWrap(){
       <td style="white-space:nowrap">
         <button class="btn btn-p btn-sm" onclick="openWrapModal('${c.id}')">랩정보</button>
         <button class="btn btn-p btn-sm" onclick="openHoldModal('${c.id}')">편입종목</button>
-        <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익률이력</button>
+        <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익이력</button>
       </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">아직 랩고객이 없습니다. \'+ 랩고객 등록\' 버튼으로 시작하세요.<br>(기존 고객은 고객관리에서 수정 → 유형에 \'랩\' 체크)</div></td></tr>'}
     </tbody></table>
   </div>
