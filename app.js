@@ -382,7 +382,7 @@ function renderReturns(){
   });
   $("tab-returns").innerHTML=`
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익(억원)</th><th>평가금액(백만)</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익(억원)</th><th>평가금액(억원)</th><th>상태</th><th></th></tr></thead><tbody>
     ${cs.length?cs.map(c=>{
       const r=lastReturn(c.id);
       const stale=!r||((new Date(t)-new Date(r.base_date))>1000*60*60*24*30);
@@ -454,7 +454,7 @@ function renderWrap(){
     <button class="btn btn-p" onclick="openClientModal(null,true)">+ 랩고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>계약일</th><th>계약금액(백만)</th><th>현재평가액(백만)</th><th>수익률</th><th>편입종목</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>계약일</th><th>계약금액(억원)</th><th>현재평가액(억원)</th><th>수익률</th><th>편입종목</th><th></th></tr></thead><tbody>
     ${list.length?list.map(c=>{
       const w=c.wrap||{};
       const wr=wrapRate(w);
@@ -540,7 +540,7 @@ function renderHoldings(){
   const wSum=rows.reduce((s,x)=>s+Number(x.weight||0),0);
   const vSum=rows.reduce((s,x)=>s+Number(x.value||0),0);
   $("h_table").innerHTML=rows.length?`
-    <table><thead><tr><th>종목명</th><th>코드</th><th>비중(%)</th><th>평가금액(백만)</th><th>수익률</th><th>메모</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>종목명</th><th>코드</th><th>비중(%)</th><th>평가금액(억원)</th><th>수익률</th><th>메모</th><th></th></tr></thead><tbody>
     ${rows.map(x=>`<tr>
       <td><b>${esc(x.stock_name)}</b></td><td class="mini">${esc(x.stock_code||"-")}</td>
       <td>${x.weight==null?"-":Number(x.weight).toFixed(1)}</td>
@@ -615,7 +615,7 @@ function renderProspects(){
     <button class="btn btn-p" onclick="openProspectModal()">+ 잠재고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>이름</th><th>회사명</th><th>연락처</th><th>이메일</th><th>담당자</th><th>예상자산(백만)</th><th>관심유형</th><th>주기</th><th>최근접촉</th><th>다음접촉</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>이름</th><th>회사명</th><th>연락처</th><th>이메일</th><th>담당자</th><th>예상자산(억원)</th><th>관심유형</th><th>주기</th><th>최근접촉</th><th>다음접촉</th><th>상태</th><th></th></tr></thead><tbody>
     ${list.length?list.map(p=>{
       const nc=nextContact(p);
       const due=!p.last_contact||(nc&&nc<=t);
