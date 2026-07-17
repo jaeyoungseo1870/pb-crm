@@ -141,6 +141,7 @@ tr:hover td{background:#fafbfd}
     <button data-tab="clients" onclick="showTab('clients')">고객관리</button>
     <button data-tab="returns" onclick="showTab('returns')">수익관리</button>
     <button data-tab="wrap" onclick="showTab('wrap')">랩고객</button>
+    <button data-tab="funds" onclick="showTab('funds')">펀드</button>
     <button data-tab="prospects" onclick="showTab('prospects')">잠재고객</button>
   </nav>
   <main>
@@ -148,6 +149,7 @@ tr:hover td{background:#fafbfd}
     <section id="tab-clients" style="display:none"></section>
     <section id="tab-returns" style="display:none"></section>
     <section id="tab-wrap" style="display:none"></section>
+    <section id="tab-funds" style="display:none"></section>
     <section id="tab-prospects" style="display:none"></section>
   </main>
 </div>
@@ -213,6 +215,39 @@ tr:hover td{background:#fafbfd}
     <div class="modal-actions">
       <button class="btn btn-s" onclick="closeModal('returnModal')">닫기</button>
       <button class="btn btn-p" onclick="saveReturn()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 펀드 등록/수정 -->
+<div class="modal-bg" id="fundModal">
+  <div class="modal">
+    <h3 id="fundModalTitle">펀드 등록</h3>
+    <input type="hidden" id="fd_id">
+    <div class="frow">
+      <div class="fg"><label>고객명 *</label><input id="fd_client"></div>
+      <div class="fg"><label>담당자</label><select id="fd_manager"></select></div>
+    </div>
+    <div class="frow full">
+      <div class="fg"><label>펀드명 *</label><input id="fd_name" placeholder="예: OO 글로벌 채권형 1호"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>가입일</label><input id="fd_join" type="date"></div>
+      <div class="fg"><label>만기</label><input id="fd_maturity" type="date"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>매입금액 (억원)</label><input id="fd_amount" type="number" min="0" step="0.1" oninput="calcFundRate()"></div>
+      <div class="fg"><label>평가액 (억원)</label><input id="fd_value" type="number" min="0" step="0.1" oninput="calcFundRate()"></div>
+    </div>
+    <div class="frow full">
+      <div class="fg"><label>수익률 (자동 계산)</label>
+        <div id="fd_rateView" style="padding:9px 12px;background:#f2f4f8;border-radius:6px;font-size:15px;font-weight:700">-</div>
+      </div>
+    </div>
+    <div class="frow full"><div class="fg"><label>메모</label><textarea id="fd_memo"></textarea></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('fundModal')">취소</button>
+      <button class="btn btn-p" onclick="saveFund()">저장</button>
     </div>
   </div>
 </div>

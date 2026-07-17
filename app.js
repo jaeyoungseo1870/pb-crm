@@ -8,7 +8,7 @@ const CAT_STYLE = {"주식":["--tag-stock","--tag-stock-t"],"채권":["--tag-bon
 
 let me = null;                 // {id, name}
 let managers = [];             // 가입한 팀원 이름 목록 (담당자 선택지)
-let clients = [], returns = [], prospects = [], holdings = [];
+let clients = [], returns = [], prospects = [], holdings = [], funds = [];
 let filters = {q:"", manager:"", type:"", cat:"", family:""};
 
 /* ---------- 유틸 ---------- */
@@ -96,17 +96,19 @@ async function fetchAll(table, orderCol){
   return {data:all,error:null};
 }
 async function loadAll(manual){
-  const [p,c,r,s,h] = await Promise.all([
+  const [p,c,r,s,h,f] = await Promise.all([
     db.from("profiles").select("name").order("created_at"),
     fetchAll("clients","created_at"),
     fetchAll("returns",null),
     fetchAll("prospects","created_at"),
     fetchAll("holdings",null),
+    fetchAll("funds","join_date"),
   ]);
   if(p.error||c.error||r.error||s.error){err(p.error||c.error||r.error||s.error);return}
   managers = p.data.map(x=>x.name);
   clients = c.data; returns = r.data; prospects = s.data;
   holdings = h.error ? [] : h.data;   // holdings 테이블 미생성 시에도 앱은 동작
+  funds = f.error ? [] : f.data;      // funds 테이블 미생성 시에도 앱은 동작
   $("teamSub").textContent = "팀원: "+(managers.join(" · ")||"-");
   renderAll();
   if(manual){const el=$("teamSub");el.style.color="#ffd166";setTimeout(()=>el.style.color="",700)}
@@ -115,7 +117,7 @@ async function loadAll(manual){
 /* ---------- 탭 ---------- */
 function showTab(t){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
-  ["dash","clients","returns","wrap","prospects"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
+  ["dash","clients","returns","wrap","funds","prospects"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
 }
 
 /* ---------- 대시보드 ---------- */
@@ -130,6 +132,8 @@ function renderDash(){
   const staleR = clients.filter(c=>{const r=lastReturn(c.id);if(!r)return true;return (new Date(t)-new Date(r.base_date))>1000*60*60*24*30});
   const wrapC = clients.filter(c=>(c.categories||[]).includes("랩"));
   const staleH = wrapC.filter(c=>{const d=clientHoldingDates(c.id)[0];if(!d)return true;return (new Date(t)-new Date(d))>1000*60*60*24*30});
+  const soon=new Date();soon.setDate(soon.getDate()+30);const soonStr=soon.toISOString().slice(0,10);
+  const dueF = funds.filter(f=>f.maturity && f.maturity>=t && f.maturity<=soonStr);
 
   $("tab-dash").innerHTML = `
   <div class="cards">
@@ -140,9 +144,10 @@ function renderDash(){
     <div class="card"><div class="lbl">잠재고객</div><div class="val">${prospects.length}<small>명</small></div></div>
   </div>
   <div class="panel"><h2>오늘 할 일</h2>
-    ${dueP.length===0&&staleR.length===0&&staleH.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
+    ${dueP.length===0&&staleR.length===0&&staleH.length===0&&dueF.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
     ${dueP.length?`<p style="margin-bottom:8px"><span class="due-badge">접촉 필요</span> <b>${dueP.length}명</b>의 잠재고객 — ${dueP.slice(0,5).map(p=>esc(p.name)).join(", ")}${dueP.length>5?" 외":""} <span class="clickable" onclick="showTab('prospects')">→ 이동</span></p>`:""}
     ${staleR.length?`<p style="margin-bottom:8px"><span class="due-badge">수익 갱신</span> 30일 이상 미입력 <b>${staleR.length}명</b> — ${staleR.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleR.length>5?" 외":""} <span class="clickable" onclick="showTab('returns')">→ 이동</span></p>`:""}
+    ${dueF.length?`<p style="margin-bottom:8px"><span class="due-badge">펀드 만기 임박</span> 30일 이내 <b>${dueF.length}건</b> — ${dueF.slice(0,5).map(f=>esc(f.client_name)+"("+(f.maturity||"")+")").join(", ")}${dueF.length>5?" 외":""} <span class="clickable" onclick="showTab('funds')">→ 이동</span></p>`:""}
     ${staleH.length?`<p><span class="due-badge">편입종목 갱신</span> 랩고객 <b>${staleH.length}명</b> — ${staleH.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleH.length>5?" 외":""} <span class="clickable" onclick="showTab('wrap')">→ 이동</span></p>`:""}`}
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="dash-grid">
@@ -617,6 +622,99 @@ async function copyPrevHoldings(){
   renderHoldings();
 }
 
+/* ---------- 펀드 관리 ---------- */
+function fundRate(f){
+  if(!f||!f.amount||f.cur_value==null)return null;
+  const a=Number(f.amount),v=Number(f.cur_value);
+  if(!a||isNaN(a)||isNaN(v))return null;
+  return (v/a-1)*100;
+}
+function renderFunds(){
+  const t=today();
+  const soon=new Date();soon.setDate(soon.getDate()+30);const soonStr=soon.toISOString().slice(0,10);
+  const list=funds.slice().sort((a,b)=>((a.join_date)||"9999-99-99").localeCompare((b.join_date)||"9999-99-99"));
+  const aSum=list.reduce((x,f)=>x+Number(f.amount||0),0);
+  const vSum=list.reduce((x,f)=>x+Number(f.cur_value||0),0);
+  $("tab-funds").innerHTML=`
+  <div class="toolbar">
+    <span class="mini">만기 30일 이내인 펀드는 강조 표시됩니다. 수익률 = 평가액 ÷ 매입금액 − 1 자동 계산.</span>
+    <div style="flex:1"></div>
+    <button class="btn btn-p" onclick="openFundModal()">+ 펀드 등록</button>
+  </div>
+  <div class="panel" style="padding:0;overflow-x:auto">
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>펀드명</th><th>가입일</th><th>만기</th><th>매입금액(억원)</th><th>평가액(억원)</th><th>수익률</th><th></th></tr></thead><tbody>
+    ${list.length?list.map(f=>{
+      const r=fundRate(f);
+      const due=f.maturity&&f.maturity>=t&&f.maturity<=soonStr;
+      const passed=f.maturity&&f.maturity<t;
+      return `<tr class="${due?"due":""}">
+      <td><b>${esc(f.client_name)}</b>${f.memo?`<div class="mini">${esc(f.memo).slice(0,30)}</div>`:""}</td>
+      <td>${esc(f.manager||"-")}</td>
+      <td>${esc(f.fund_name||"-")}</td>
+      <td>${f.join_date||"-"}</td>
+      <td>${f.maturity||"-"} ${due?'<span class="due-badge">만기임박</span>':""}${passed?'<span class="due-badge">만기경과</span>':""}</td>
+      <td>${fmt(f.amount)}</td>
+      <td>${fmt(f.cur_value)}</td>
+      <td>${r!=null?rateHtml(r):'<span class="mini">-</span>'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-s btn-sm" onclick="openFundModal('${f.id}')">수정</button>
+        <button class="btn btn-d btn-sm" onclick="delFund('${f.id}')">삭제</button>
+      </td></tr>`}).join("")
+      +`<tr style="background:#f8f9fb;font-weight:700"><td>합계 (${list.length}건)</td><td></td><td></td><td></td><td></td><td>${fmt(aSum)}</td><td>${fmt(vSum)}</td><td>${aSum>0?rateHtml((vSum/aSum-1)*100):"-"}</td><td></td></tr>`
+      :'<tr><td colspan="9"><div class="empty">등록된 펀드가 없습니다. \'+ 펀드 등록\' 버튼으로 시작하세요.</div></td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+function openFundModal(id){
+  const f=id?funds.find(x=>x.id===id):null;
+  $("fundModalTitle").textContent=f?"펀드 수정":"펀드 등록";
+  $("fd_id").value=f?f.id:"";
+  $("fd_client").value=f?f.client_name:"";
+  $("fd_manager").innerHTML=mgrOptions(f?(f.manager||me.name):me.name);
+  $("fd_name").value=f?(f.fund_name||""):"";
+  $("fd_join").value=f?(f.join_date||""):"";
+  $("fd_maturity").value=f?(f.maturity||""):"";
+  $("fd_amount").value=f?(f.amount??""):"";
+  $("fd_value").value=f?(f.cur_value??""):"";
+  $("fd_memo").value=f?(f.memo||""):"";
+  calcFundRate();
+  $("fundModal").classList.add("open");
+}
+function calcFundRate(){
+  const r=fundRate({amount:$("fd_amount").value,cur_value:$("fd_value").value===""?null:$("fd_value").value});
+  $("fd_rateView").innerHTML=r==null?'<span class="mini" style="font-weight:400">매입금액과 평가액을 입력하면 자동 계산됩니다</span>':rateHtml(r);
+}
+async function saveFund(){
+  const client_name=$("fd_client").value.trim();
+  const fund_name=$("fd_name").value.trim();
+  if(!client_name){alert("고객명을 입력하세요.");return}
+  if(!fund_name){alert("펀드명을 입력하세요.");return}
+  const id=$("fd_id").value;
+  const row={
+    client_name, fund_name,
+    manager:$("fd_manager").value,
+    join_date:$("fd_join").value||null,
+    maturity:$("fd_maturity").value||null,
+    amount:$("fd_amount").value===""?null:Number($("fd_amount").value),
+    cur_value:$("fd_value").value===""?null:Number($("fd_value").value),
+    memo:$("fd_memo").value.trim()||null
+  };
+  const q = id ? db.from("funds").update(row).eq("id",id) : db.from("funds").insert(row);
+  const {error}=await q;
+  if(error){err(error);return}
+  closeModal("fundModal");
+  await loadAll();
+  showTab("funds");
+}
+async function delFund(id){
+  const f=funds.find(x=>x.id===id);
+  if(!confirm(`'${f.client_name}'님의 '${f.fund_name||"펀드"}'를 삭제할까요?`))return;
+  const {error}=await db.from("funds").delete().eq("id",id);
+  if(error){err(error);return}
+  await loadAll();
+  showTab("funds");
+}
+
 /* ---------- 잠재고객 ---------- */
 function renderProspects(){
   const t=today();
@@ -842,5 +940,5 @@ async function runImport(){
 /* ---------- 공통 ---------- */
 function closeModal(id){$(id).classList.remove("open")}
 document.querySelectorAll(".modal-bg").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open")}));
-function renderAll(){renderDash();renderClients();renderReturns();renderWrap();renderProspects()}
+function renderAll(){renderDash();renderClients();renderReturns();renderWrap();renderFunds();renderProspects()}
 boot();
