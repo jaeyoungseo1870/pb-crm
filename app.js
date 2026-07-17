@@ -468,6 +468,8 @@ function renderWrap(){
   const list=clients.filter(c=>(c.categories||[]).includes("랩"))
     .sort((a,b)=>((a.wrap&&a.wrap.date)||"9999-99-99").localeCompare((b.wrap&&b.wrap.date)||"9999-99-99"));
   const t=today();
+  const wAmt=list.reduce((x,c)=>x+Number((c.wrap&&c.wrap.amount)||0),0);
+  const wVal=list.reduce((x,c)=>x+Number((c.wrap&&c.wrap.curValue)||0),0);
   $("tab-wrap").innerHTML=`
   <div class="toolbar">
     <span class="mini">랩정보 버튼으로 계약·평가 정보를, 편입종목 버튼으로 포트폴리오를 관리하세요.</span>
@@ -496,7 +498,9 @@ function renderWrap(){
         <button class="btn btn-p btn-sm" onclick="openHoldModal('${c.id}')">편입종목</button>
         <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익이력</button>
         <button class="btn btn-d btn-sm" onclick="delClient('${c.id}')">삭제</button>
-      </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">아직 랩고객이 없습니다. \'+ 랩고객 등록\' 버튼으로 시작하세요.<br>(기존 고객은 고객관리에서 수정 → 유형에 \'랩\' 체크)</div></td></tr>'}
+      </td></tr>`}).join("")
+      +`<tr style="background:#f8f9fb;font-weight:700"><td>합계 (${list.length}건)</td><td></td><td></td><td>${fmt(wAmt)}</td><td>${fmt(wVal)}</td><td>${wAmt>0?rateHtml((wVal/wAmt-1)*100):"-"}</td><td></td><td></td></tr>`
+      :'<tr><td colspan="8"><div class="empty">아직 랩고객이 없습니다. \'+ 랩고객 등록\' 버튼으로 시작하세요.<br>(기존 고객은 고객관리에서 수정 → 유형에 \'랩\' 체크)</div></td></tr>'}
     </tbody></table>
   </div>
   <p class="mini" style="margin-top:8px">※ 수익률 = 현재평가액 ÷ 계약금액 − 1 로 자동 계산됩니다. 편입종목 기준일이 30일을 초과하면 '갱신' 배지가 표시됩니다.</p>`;
