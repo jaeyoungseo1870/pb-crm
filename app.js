@@ -734,7 +734,7 @@ function renderProspects(){
     <button class="btn btn-p" onclick="openProspectModal()">+ 잠재고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>이름</th><th>회사명</th><th>연락처</th><th>이메일</th><th>담당자</th><th>예상자산(억원)</th><th>관심유형</th><th>주기</th><th>최근접촉</th><th>다음접촉</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>이름</th><th>회사명</th><th>연락처</th><th>이메일</th><th>담당자</th><th>예상자산(억원)</th><th>관심유형</th><th>주기</th><th>최근접촉</th><th>다음접촉</th><th></th></tr></thead><tbody>
     ${list.length?list.map(p=>{
       const nc=nextContact(p);
       const due=!p.last_contact||(nc&&nc<=t);
@@ -746,14 +746,13 @@ function renderProspects(){
         <td>${esc(p.manager||"-")}</td><td>${fmt(p.expected_asset)}</td>
         <td>${(p.interests||[]).map(catTag).join("")||"-"}</td>
         <td>${cyc}</td><td>${p.last_contact||"-"}</td><td>${nc||"-"}</td>
-        <td>${due?'<span class="due-badge">접촉 필요</span>':'<span class="ok-badge">양호</span>'}</td>
         <td style="white-space:nowrap">
           <button class="btn btn-s btn-sm" onclick="openMsgModal('${p.id}')">메시지</button>
           <button class="btn btn-p btn-sm" onclick="contactNow('${p.id}')">접촉완료</button>
           <button class="btn btn-s btn-sm" onclick="openProspectModal('${p.id}')">수정</button>
           <button class="btn btn-s btn-sm" onclick="convertProspect('${p.id}')">고객전환</button>
           <button class="btn btn-d btn-sm" onclick="delProspect('${p.id}')">삭제</button>
-        </td></tr>`}).join(""):'<tr><td colspan="12"><div class="empty">등록된 잠재고객이 없습니다</div></td></tr>'}
+        </td></tr>`}).join(""):'<tr><td colspan="11"><div class="empty">등록된 잠재고객이 없습니다</div></td></tr>'}
     </tbody></table>
   </div>`;
 }
