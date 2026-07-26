@@ -10,6 +10,7 @@ let me = null;                 // {id, name}
 let managers = [];             // 가입한 팀원 이름 목록 (담당자 선택지)
 let clients = [], returns = [], prospects = [], holdings = [], funds = [];
 let filters = {q:"", manager:"", type:"", cat:"", family:""};
+let pFilters = {cat:"", manager:""};
 
 /* ---------- 유틸 ---------- */
 const $ = id => document.getElementById(id);
@@ -722,13 +723,19 @@ async function delFund(id){
 /* ---------- 잠재고객 ---------- */
 function renderProspects(){
   const t=today();
-  const list=prospects.slice().sort((a,b)=>{
+  const list=prospects.filter(p=>{
+    if(pFilters.cat && !(p.interests||[]).includes(pFilters.cat))return false;
+    if(pFilters.manager && p.manager!==pFilters.manager)return false;
+    return true;
+  }).sort((a,b)=>{
     const na=nextContact(a)||"0000",nb=nextContact(b)||"0000";
     return na.localeCompare(nb);
   });
   $("tab-prospects").innerHTML=`
   <div class="toolbar">
     <span class="mini">접촉 예정일이 지난 고객은 강조 표시됩니다.</span>
+    <select onchange="pFilters.manager=this.value;renderProspects()" style="padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff"><option value="">담당자 전체</option>${managers.map(m=>`<option ${pFilters.manager===m?"selected":""}>${esc(m)}</option>`).join("")}</select>
+    <select onchange="pFilters.cat=this.value;renderProspects()" style="padding:7px 10px;border:1px solid var(--line);border-radius:6px;font-size:13px;background:#fff"><option value="">유형 전체</option>${CATS.map(c=>`<option ${pFilters.cat===c?"selected":""}>${c}</option>`).join("")}</select>
     <div style="flex:1"></div>
     <button class="btn btn-s" onclick="openMsgModal()">✉ 메시지 보내기</button>
     <button class="btn btn-p" onclick="openProspectModal()">+ 잠재고객 등록</button>
