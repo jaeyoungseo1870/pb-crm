@@ -403,19 +403,18 @@ function renderReturns(){
   });
   $("tab-returns").innerHTML=`
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익(억원)</th><th>평가금액(억원)</th><th>상태</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>담당자</th><th>자산(억원)</th><th>최근 기준일</th><th>수익(억원)</th><th>평가금액(억원)</th><th></th></tr></thead><tbody>
     ${cs.length?cs.map(c=>{
       const r=lastReturn(c.id);
       const stale=!r||((new Date(t)-new Date(r.base_date))>1000*60*60*24*30);
       return `<tr class="${stale?"due":""}">
         <td><b>${esc(c.name)}</b></td><td>${esc(c.manager||"-")}</td><td>${fmt(c.aum)}</td>
         <td>${r?r.base_date:"-"}</td><td>${r?amtHtml(r.rate):"-"}</td><td>${r?fmt(r.value):"-"}</td>
-        <td>${stale?'<span class="due-badge">갱신 필요</span>':'<span class="ok-badge">최신</span>'}</td>
         <td><button class="btn btn-p btn-sm" onclick="openReturnModal('${c.id}')">입력/이력</button></td>
-      </tr>`}).join(""):'<tr><td colspan="8"><div class="empty">고객을 먼저 등록하세요</div></td></tr>'}
+      </tr>`}).join(""):'<tr><td colspan="7"><div class="empty">고객을 먼저 등록하세요</div></td></tr>'}
     </tbody></table>
   </div>
-  <p class="mini" style="margin-top:8px">※ 최근 입력일이 30일을 초과하면 '갱신 필요'로 표시됩니다.</p>`;
+  <p class="mini" style="margin-top:8px">※ 최근 입력일이 30일을 초과한 고객은 행이 강조 표시됩니다.</p>`;
 }
 function openReturnModal(id){
   const c=clients.find(x=>x.id===id);if(!c)return;
