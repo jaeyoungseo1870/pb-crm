@@ -364,8 +364,7 @@ function openClientModal(id,presetWrap){
   $("c_email").value=c?(c.email||""):"";
   $("c_memo").value=c?(c.memo||""):"";
   buildCatChecks("c_cats",c?(c.categories||[]):(presetWrap?["랩"]:[]));
-  $("c_importance").value=c?(c.importance||""):"";
-  renderImpInput();
+  if($("c_importance")){ $("c_importance").value=c?(c.importance||""):""; renderImpInput(); }
   const w=c&&c.wrap?c.wrap:{};
   $("c_wrapCompany").value=w.company||"";
   $("c_wrapAmount").value=w.amount||"";
@@ -374,6 +373,7 @@ function openClientModal(id,presetWrap){
   $("clientModal").classList.add("open");
 }
 function renderImpInput(){
+  if(!$("c_imp"))return;
   const v=Number($("c_importance").value||0);
   $("c_imp").innerHTML=[1,2,3,4,5].map(n=>
     `<span onclick="setImp(${n})" style="color:${n<=v?'var(--brass)':'#d6dae2'}">★</span>`
@@ -395,7 +395,7 @@ async function saveClient(){
     aum:$("c_aum").value===""?null:Number($("c_aum").value),
     phone:$("c_phone").value.trim()||null, email:$("c_email").value.trim()||null,
     memo:$("c_memo").value.trim()||null, categories:cats,
-    importance:$("c_importance").value===""?null:Number($("c_importance").value),
+    importance:(!$("c_importance")||$("c_importance").value==="")?null:Number($("c_importance").value),
     wrap:cats.includes("랩")?{company:$("c_wrapCompany").value.trim(),amount:$("c_wrapAmount").value,date:$("c_wrapDate").value,curValue:(id?(clients.find(x=>x.id===id)?.wrap?.curValue??null):null)}:null
   };
   const q = id ? db.from("clients").update(row).eq("id",id) : db.from("clients").insert(row);
