@@ -9,7 +9,7 @@ const CAT_STYLE = {"주식":["--tag-stock","--tag-stock-t"],"채권":["--tag-bon
 let me = null;                 // {id, name}
 let managers = [];             // 가입한 팀원 이름 목록 (담당자 선택지)
 let clients = [], returns = [], prospects = [], holdings = [], funds = [];
-let filters = {q:"", manager:"", type:"", cat:"", family:""};
+let filters = {q:"", manager:"", type:"", cat:"", family:"", imp:""};
 let pFilters = {cat:"", manager:""};
 
 /* ---------- 유틸 ---------- */
@@ -20,6 +20,7 @@ function today(){return new Date().toISOString().slice(0,10)}
 function catTag(c){const s=CAT_STYLE[c]||["--tag-re","--tag-re-t"];return `<span class="tag" style="background:var(${s[0]});color:var(${s[1]})">${c}</span>`}
 function rateHtml(r){if(r==null)return"-";const n=Number(r);return `<span class="${n>=0?"pos":"neg"}">${n>=0?"+":""}${n.toFixed(2)}%</span>`}
 function amtHtml(r){if(r==null)return"-";const n=Number(r);return `<b>${n.toLocaleString("ko-KR",{maximumFractionDigits:2})}</b>`}
+function impStars(n){n=Number(n||0);return n>0?`<span style="color:var(--brass);font-size:15px;letter-spacing:1px">${"★".repeat(n)}</span>`:'<span class="mini">-</span>'}
 function clientReturns(cid){return returns.filter(r=>r.client_id===cid).sort((a,b)=>b.base_date.localeCompare(a.base_date))}
 function lastReturn(cid){const rs=clientReturns(cid);return rs.length?rs[0]:null}
 function nextContact(p){if(!p.last_contact)return null;const d=new Date(p.last_contact);d.setDate(d.getDate()+Number(p.cycle||30));return d.toISOString().slice(0,10)}
@@ -174,6 +175,7 @@ function filteredClients(){
     if(filters.type && c.type!==filters.type)return false;
     if(filters.cat && !(c.categories||[]).includes(filters.cat))return false;
     if(filters.family && c.family!==filters.family)return false;
+    if(filters.imp && Number(c.importance||0) < Number(filters.imp))return false;
     return true;
   }).sort((a,b)=>Number(b.aum||0)-Number(a.aum||0));
 }
@@ -200,15 +202,17 @@ function renderClients(){
     <select onchange="filters.type=this.value;renderClients()"><option value="">개인/법인</option><option ${filters.type==="개인"?"selected":""}>개인</option><option ${filters.type==="법인"?"selected":""}>법인</option></select>
     <select onchange="filters.cat=this.value;renderClients()"><option value="">유형 전체</option>${CATS.map(c=>`<option ${filters.cat===c?"selected":""}>${c}</option>`).join("")}</select>
     <select onchange="filters.family=this.value;renderClients()"><option value="">패밀리 전체</option>${fams.map(f=>`<option ${filters.family===f?"selected":""}>${esc(f)}</option>`).join("")}</select>
+    <select onchange="filters.imp=this.value;renderClients()"><option value="">중요도 전체</option>${[5,4,3,2,1].map(n=>`<option value="${n}" ${filters.imp==String(n)?"selected":""}>${"★".repeat(n)}${n<5?" 이상":""}</option>`).join("")}</select>
     <div style="flex:1"></div>
     <button class="btn btn-s" onclick="openImportModal()">📄 Excel 업로드</button>
     <button class="btn btn-p" onclick="openClientModal()">+ 고객 등록</button>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>수익(억원)</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>중요도</th><th>패밀리</th><th>유형</th><th>담당자</th><th>자산(억원)</th><th>수익(억원)</th><th></th></tr></thead><tbody>
     ${list.length?list.map(c=>{const r=lastReturn(c.id);return `<tr>
       <td><b>${esc(c.name)}</b>${c.memo?`<div class="mini">${esc(c.memo).slice(0,30)}</div>`:""}</td>
       <td>${c.type||"-"}</td>
+      <td>${impStars(c.importance)}</td>
       <td>${familyCell(c)}</td>
       <td>${(c.categories||[]).map(catTag).join("")||"-"}</td>
       <td>${esc(c.manager||"-")}</td>
@@ -219,7 +223,7 @@ function renderClients(){
         <button class="btn btn-s btn-sm" onclick="openClientModal('${c.id}')">수정</button>
         <button class="btn btn-s btn-sm" onclick="openReturnModal('${c.id}')">수익</button>
         <button class="btn btn-d btn-sm" onclick="delClient('${c.id}')">삭제</button>
-      </td></tr>`}).join(""):'<tr><td colspan="8"><div class="empty">조건에 맞는 고객이 없습니다</div></td></tr>'}
+      </td></tr>`}).join(""):'<tr><td colspan="9"><div class="empty">조건에 맞는 고객이 없습니다</div></td></tr>'}
     </tbody></table>
   </div>`;
 }
@@ -360,12 +364,25 @@ function openClientModal(id,presetWrap){
   $("c_email").value=c?(c.email||""):"";
   $("c_memo").value=c?(c.memo||""):"";
   buildCatChecks("c_cats",c?(c.categories||[]):(presetWrap?["랩"]:[]));
+  $("c_importance").value=c?(c.importance||""):"";
+  renderImpInput();
   const w=c&&c.wrap?c.wrap:{};
   $("c_wrapCompany").value=w.company||"";
   $("c_wrapAmount").value=w.amount||"";
   $("c_wrapDate").value=w.date||"";
   toggleWrapFields();
   $("clientModal").classList.add("open");
+}
+function renderImpInput(){
+  const v=Number($("c_importance").value||0);
+  $("c_imp").innerHTML=[1,2,3,4,5].map(n=>
+    `<span onclick="setImp(${n})" style="color:${n<=v?'var(--brass)':'#d6dae2'}">★</span>`
+  ).join("");
+}
+function setImp(n){
+  const cur=Number($("c_importance").value||0);
+  $("c_importance").value = (cur===n)?"":n;
+  renderImpInput();
 }
 async function saveClient(){
   const name=$("c_name").value.trim();
@@ -378,6 +395,7 @@ async function saveClient(){
     aum:$("c_aum").value===""?null:Number($("c_aum").value),
     phone:$("c_phone").value.trim()||null, email:$("c_email").value.trim()||null,
     memo:$("c_memo").value.trim()||null, categories:cats,
+    importance:$("c_importance").value===""?null:Number($("c_importance").value),
     wrap:cats.includes("랩")?{company:$("c_wrapCompany").value.trim(),amount:$("c_wrapAmount").value,date:$("c_wrapDate").value,curValue:(id?(clients.find(x=>x.id===id)?.wrap?.curValue??null):null)}:null
   };
   const q = id ? db.from("clients").update(row).eq("id",id) : db.from("clients").insert(row);
@@ -909,7 +927,7 @@ function renderImportPreview(){
   const sample=importRows.slice(0,5).map(mappedRow);
   $("importPreview").innerHTML=`
     <p class="mini" style="margin-bottom:6px">미리보기 (상위 5건) — 이렇게 등록됩니다:</p>
-    <table><thead><tr><th>고객명</th><th>구분</th><th>패밀리</th><th>담당자</th><th>자산(억원)</th><th>유형</th></tr></thead><tbody>
+    <table><thead><tr><th>고객명</th><th>구분</th><th>중요도</th><th>패밀리</th><th>담당자</th><th>자산(억원)</th><th>유형</th></tr></thead><tbody>
     ${sample.map(r=>`<tr>
       <td>${r.name?`<b>${esc(r.name)}</b>`:'<span style="color:#c0392b">비어있음!</span>'}</td>
       <td>${r.type}</td><td>${esc(r.family||"-")}</td><td>${esc(r.manager)}</td>
