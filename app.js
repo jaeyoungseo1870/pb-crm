@@ -8,7 +8,7 @@ const CAT_STYLE = {"주식":["--tag-stock","--tag-stock-t"],"채권":["--tag-bon
 
 let me = null;                 // {id, name}
 let managers = [];             // 가입한 팀원 이름 목록 (담당자 선택지)
-let clients = [], returns = [], prospects = [], holdings = [], funds = [];
+let clients = [], returns = [], prospects = [], holdings = [], funds = [], docs = [];
 let filters = {q:"", manager:"", type:"", cat:"", family:"", imp:""};
 let pFilters = {cat:"", manager:""};
 
@@ -98,19 +98,21 @@ async function fetchAll(table, orderCol){
   return {data:all,error:null};
 }
 async function loadAll(manual){
-  const [p,c,r,s,h,f] = await Promise.all([
+  const [p,c,r,s,h,f,d] = await Promise.all([
     db.from("profiles").select("name").order("created_at"),
     fetchAll("clients","created_at"),
     fetchAll("returns",null),
     fetchAll("prospects","created_at"),
     fetchAll("holdings",null),
     fetchAll("funds","join_date"),
+    fetchAll("documents","created_at"),
   ]);
   if(p.error||c.error||r.error||s.error){err(p.error||c.error||r.error||s.error);return}
   managers = p.data.map(x=>x.name);
   clients = c.data; returns = r.data; prospects = s.data;
   holdings = h.error ? [] : h.data;   // holdings 테이블 미생성 시에도 앱은 동작
   funds = f.error ? [] : f.data;      // funds 테이블 미생성 시에도 앱은 동작
+  docs = d.error ? [] : d.data;       // documents 테이블 미생성 시에도 앱은 동작
   $("teamSub").textContent = "팀원: "+(managers.join(" · ")||"-");
   renderAll();
   if(manual){const el=$("teamSub");el.style.color="#ffd166";setTimeout(()=>el.style.color="",700)}
@@ -119,7 +121,7 @@ async function loadAll(manual){
 /* ---------- 탭 ---------- */
 function showTab(t){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
-  ["dash","clients","returns","wrap","funds","prospects"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
+  ["dash","clients","returns","wrap","funds","prospects","docs"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
 }
 
 /* ---------- 대시보드 ---------- */
@@ -964,8 +966,80 @@ async function runImport(){
   if(!failed)setTimeout(()=>closeModal("importModal"),1800);
 }
 
+/* ---------- 자료실 ---------- */
+function fmtSize(b){if(b==null)return"";if(b>1048576)return(b/1048576).toFixed(1)+" MB";if(b>1024)return(b/1024).toFixed(0)+" KB";return b+" B"}
+function renderDocs(){
+  const list=docs.slice().sort((a,b)=>(b.created_at||"").localeCompare(a.created_at||""));
+  $("tab-docs").innerHTML=`
+  <div class="panel">
+    <h2>자료 올리기</h2>
+    <div class="frow" style="grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:0">
+      <div class="fg"><label>제목 *</label><input id="doc_title" placeholder="예: 2026년 하반기 시장 전망"></div>
+      <div class="fg"><label>파일 * (PPT, PDF, Excel, Word, 이미지 등)</label><input id="doc_file" type="file"></div>
+      <button class="btn btn-p" id="doc_upBtn" style="height:36px" onclick="uploadDoc()">업로드</button>
+    </div>
+    <p class="mini" id="doc_msg" style="margin-top:8px"></p>
+  </div>
+  <div class="panel" style="padding:0;overflow-x:auto">
+    <table><thead><tr><th>제목</th><th>파일명</th><th>올린 사람</th><th>등록일</th><th></th></tr></thead><tbody>
+    ${list.length?list.map(d=>`<tr>
+      <td><b>${esc(d.title)}</b></td>
+      <td class="mini">${esc(d.file_name)}</td>
+      <td>${esc(d.uploaded_by||"-")}</td>
+      <td class="mini">${(d.created_at||"").slice(0,10)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-p btn-sm" onclick="downloadDoc('${d.id}')">열기/다운로드</button>
+        <button class="btn btn-d btn-sm" onclick="delDoc('${d.id}')">삭제</button>
+      </td></tr>`).join(""):'<tr><td colspan="5"><div class="empty">등록된 자료가 없습니다. 위에서 첫 자료를 올려보세요.</div></td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+async function uploadDoc(){
+  const title=$("doc_title").value.trim();
+  const fileInput=$("doc_file");
+  const file=fileInput.files[0];
+  if(!title){alert("제목을 입력하세요.");return}
+  if(!file){alert("파일을 선택하세요.");return}
+  if(file.size>50*1024*1024){alert("파일이 50MB를 넘습니다. 더 작은 파일로 올려주세요.");return}
+  const btn=$("doc_upBtn"); btn.disabled=true; btn.textContent="업로드 중...";
+  $("doc_msg").textContent="파일을 올리는 중입니다... ("+fmtSize(file.size)+")";
+  try{
+    const ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,"")||"bin";
+    const path=Date.now()+"_"+Math.random().toString(36).slice(2,8)+"."+ext;
+    const {error:upErr}=await db.storage.from("docs").upload(path,file);
+    if(upErr)throw upErr;
+    const {error:insErr}=await db.from("documents").insert({
+      title, file_name:file.name, file_path:path, uploaded_by:me.name
+    });
+    if(insErr)throw insErr;
+    $("doc_title").value=""; fileInput.value="";
+    await loadAll();
+    showTab("docs");
+    $("doc_msg").textContent="업로드 완료 ✓";
+  }catch(e){
+    alert("업로드 실패: "+(e.message||e));
+    $("doc_msg").textContent="";
+  }
+  btn.disabled=false; btn.textContent="업로드";
+}
+async function downloadDoc(id){
+  const d=docs.find(x=>x.id===id);if(!d)return;
+  const {data,error}=await db.storage.from("docs").createSignedUrl(d.file_path,3600);
+  if(error){err(error);return}
+  window.open(data.signedUrl,"_blank");
+}
+async function delDoc(id){
+  const d=docs.find(x=>x.id===id);if(!d)return;
+  if(!confirm(`'${d.title}' 자료를 삭제할까요?`))return;
+  await db.storage.from("docs").remove([d.file_path]);
+  const {error}=await db.from("documents").delete().eq("id",id);
+  if(error){err(error);return}
+  await loadAll();
+  showTab("docs");
+}
+
 /* ---------- 공통 ---------- */
 function closeModal(id){$(id).classList.remove("open")}
 document.querySelectorAll(".modal-bg").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open")}));
-function renderAll(){renderDash();renderClients();renderReturns();renderWrap();renderFunds();renderProspects()}
+function renderAll(){renderDash();renderClients();renderReturns();renderWrap();renderFunds();renderProspects();renderDocs()}
 boot();
