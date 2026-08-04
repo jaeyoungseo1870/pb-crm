@@ -257,6 +257,20 @@ tr:hover td{background:#fafbfd}
   </div>
 </div>
 
+<!-- 자료 수정 -->
+<div class="modal-bg" id="docEditModal">
+  <div class="modal">
+    <h3>자료 수정</h3>
+    <input type="hidden" id="de_id">
+    <div class="frow full"><div class="fg"><label>제목 *</label><input id="de_title"></div></div>
+    <div class="frow full"><div class="fg"><label>관심고객</label><textarea id="de_interest" style="min-height:110px" placeholder="이 자료를 안내할 고객들을 자유롭게 적어주세요&#10;예: 홍성천(파인테크), 김영재 — 8월 미팅 시 전달"></textarea></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-s" onclick="closeModal('docEditModal')">취소</button>
+      <button class="btn btn-p" onclick="saveDocEdit()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 잠재고객 등록/수정 -->
 <div class="modal-bg" id="prospectModal">
   <div class="modal">

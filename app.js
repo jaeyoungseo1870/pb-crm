@@ -973,22 +973,28 @@ function renderDocs(){
   $("tab-docs").innerHTML=`
   <div class="panel">
     <h2>자료 올리기</h2>
-    <div class="frow" style="grid-template-columns:1fr 1fr auto;gap:8px;align-items:end;margin-bottom:0">
+    <div class="frow" style="grid-template-columns:1fr 1fr;gap:8px;align-items:end">
       <div class="fg"><label>제목 *</label><input id="doc_title" placeholder="예: 2026년 하반기 시장 전망"></div>
       <div class="fg"><label>파일 * (PPT, PDF, Excel, Word, 이미지 등)</label><input id="doc_file" type="file"></div>
-      <button class="btn btn-p" id="doc_upBtn" style="height:36px" onclick="uploadDoc()">업로드</button>
     </div>
+    <div class="frow full" style="margin-bottom:8px">
+      <div class="fg"><label>관심고객 (여러 줄 입력 가능)</label>
+        <textarea id="doc_interest" style="min-height:90px" placeholder="이 자료를 안내할 고객들을 자유롭게 적어주세요&#10;예: 홍성천(파인테크), 김영재 — 8월 미팅 시 전달"></textarea>
+      </div>
+    </div>
+    <button class="btn btn-p" id="doc_upBtn" onclick="uploadDoc()">업로드</button>
     <p class="mini" id="doc_msg" style="margin-top:8px"></p>
   </div>
   <div class="panel" style="padding:0;overflow-x:auto">
-    <table><thead><tr><th>제목</th><th>파일명</th><th>올린 사람</th><th>등록일</th><th></th></tr></thead><tbody>
+    <table><thead><tr><th>제목</th><th>파일명</th><th>관심고객</th><th>등록일</th><th></th></tr></thead><tbody>
     ${list.length?list.map(d=>`<tr>
       <td><b>${esc(d.title)}</b></td>
       <td class="mini">${esc(d.file_name)}</td>
-      <td>${esc(d.uploaded_by||"-")}</td>
+      <td style="white-space:pre-wrap;max-width:340px">${esc(d.interest_clients||"-")}</td>
       <td class="mini">${(d.created_at||"").slice(0,10)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-p btn-sm" onclick="downloadDoc('${d.id}')">열기/다운로드</button>
+        <button class="btn btn-s btn-sm" onclick="openDocEdit('${d.id}')">수정</button>
         <button class="btn btn-d btn-sm" onclick="delDoc('${d.id}')">삭제</button>
       </td></tr>`).join(""):'<tr><td colspan="5"><div class="empty">등록된 자료가 없습니다. 위에서 첫 자료를 올려보세요.</div></td></tr>'}
     </tbody></table>
@@ -1009,7 +1015,8 @@ async function uploadDoc(){
     const {error:upErr}=await db.storage.from("docs").upload(path,file);
     if(upErr)throw upErr;
     const {error:insErr}=await db.from("documents").insert({
-      title, file_name:file.name, file_path:path, uploaded_by:me.name
+      title, file_name:file.name, file_path:path, uploaded_by:me.name,
+      interest_clients:$("doc_interest")?$("doc_interest").value.trim()||null:null
     });
     if(insErr)throw insErr;
     $("doc_title").value=""; fileInput.value="";
@@ -1021,6 +1028,25 @@ async function uploadDoc(){
     $("doc_msg").textContent="";
   }
   btn.disabled=false; btn.textContent="업로드";
+}
+function openDocEdit(id){
+  const d=docs.find(x=>x.id===id);if(!d)return;
+  $("de_id").value=id;
+  $("de_title").value=d.title||"";
+  $("de_interest").value=d.interest_clients||"";
+  $("docEditModal").classList.add("open");
+}
+async function saveDocEdit(){
+  const id=$("de_id").value;
+  const title=$("de_title").value.trim();
+  if(!title){alert("제목을 입력하세요.");return}
+  const {error}=await db.from("documents").update({
+    title, interest_clients:$("de_interest").value.trim()||null
+  }).eq("id",id);
+  if(error){err(error);return}
+  closeModal("docEditModal");
+  await loadAll();
+  showTab("docs");
 }
 async function downloadDoc(id){
   const d=docs.find(x=>x.id===id);if(!d)return;
