@@ -8,7 +8,7 @@ const CAT_STYLE = {"주식":["--tag-stock","--tag-stock-t"],"채권":["--tag-bon
 
 let me = null;                 // {id, name}
 let managers = [];             // 가입한 팀원 이름 목록 (담당자 선택지)
-let clients = [], returns = [], prospects = [], holdings = [], funds = [], docs = [];
+let clients = [], returns = [], prospects = [], holdings = [], funds = [], docs = [], elsList = [];
 let filters = {q:"", manager:"", type:"", cat:"", family:"", imp:""};
 let pFilters = {cat:"", manager:""};
 
@@ -98,7 +98,7 @@ async function fetchAll(table, orderCol){
   return {data:all,error:null};
 }
 async function loadAll(manual){
-  const [p,c,r,s,h,f,d] = await Promise.all([
+  const [p,c,r,s,h,f,d,e] = await Promise.all([
     db.from("profiles").select("name").order("created_at"),
     fetchAll("clients","created_at"),
     fetchAll("returns",null),
@@ -106,6 +106,7 @@ async function loadAll(manual){
     fetchAll("holdings",null),
     fetchAll("funds","join_date"),
     fetchAll("documents","created_at"),
+    fetchAll("els","join_date"),
   ]);
   if(p.error||c.error||r.error||s.error){err(p.error||c.error||r.error||s.error);return}
   managers = p.data.map(x=>x.name);
@@ -113,6 +114,7 @@ async function loadAll(manual){
   holdings = h.error ? [] : h.data;   // holdings 테이블 미생성 시에도 앱은 동작
   funds = f.error ? [] : f.data;      // funds 테이블 미생성 시에도 앱은 동작
   docs = d.error ? [] : d.data;       // documents 테이블 미생성 시에도 앱은 동작
+  elsList = e.error ? [] : e.data;    // els 테이블 미생성 시에도 앱은 동작
   $("teamSub").textContent = "팀원: "+(managers.join(" · ")||"-");
   renderAll();
   if(manual){const el=$("teamSub");el.style.color="#ffd166";setTimeout(()=>el.style.color="",700)}
@@ -121,7 +123,7 @@ async function loadAll(manual){
 /* ---------- 탭 ---------- */
 function showTab(t){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
-  ["dash","clients","returns","wrap","funds","prospects","docs"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
+  ["dash","clients","returns","wrap","funds","prospects","els","docs"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
 }
 
 /* ---------- 대시보드 ---------- */
@@ -138,6 +140,7 @@ function renderDash(){
   const staleH = wrapC.filter(c=>{const d=clientHoldingDates(c.id)[0];if(!d)return true;return (new Date(t)-new Date(d))>1000*60*60*24*30});
   const soon=new Date();soon.setDate(soon.getDate()+30);const soonStr=soon.toISOString().slice(0,10);
   const dueF = funds.filter(f=>f.maturity && f.maturity>=t && f.maturity<=soonStr);
+  const dueE = elsList.filter(x=>x.maturity && x.maturity>=t && x.maturity<=soonStr);
 
   $("tab-dash").innerHTML = `
   <div class="cards">
@@ -148,9 +151,10 @@ function renderDash(){
     <div class="card"><div class="lbl">잠재고객</div><div class="val">${prospects.length}<small>명</small></div></div>
   </div>
   <div class="panel"><h2>오늘 할 일</h2>
-    ${dueP.length===0&&staleR.length===0&&staleH.length===0&&dueF.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
+    ${dueP.length===0&&staleR.length===0&&staleH.length===0&&dueF.length===0&&dueE.length===0?'<div class="empty">모두 처리되었습니다 ✓</div>':`
     ${dueP.length?`<p style="margin-bottom:8px"><span class="due-badge">접촉 필요</span> <b>${dueP.length}명</b>의 잠재고객 — ${dueP.slice(0,5).map(p=>esc(p.name)).join(", ")}${dueP.length>5?" 외":""} <span class="clickable" onclick="showTab('prospects')">→ 이동</span></p>`:""}
     ${staleR.length?`<p style="margin-bottom:8px"><span class="due-badge">수익 갱신</span> 30일 이상 미입력 <b>${staleR.length}명</b> — ${staleR.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleR.length>5?" 외":""} <span class="clickable" onclick="showTab('returns')">→ 이동</span></p>`:""}
+    ${dueE.length?`<p style="margin-bottom:8px"><span class="due-badge">ELS 만기 임박</span> 30일 이내 <b>${dueE.length}건</b> — ${dueE.slice(0,5).map(x=>esc(x.client_name)+"("+(x.maturity||"")+")").join(", ")}${dueE.length>5?" 외":""} <span class="clickable" onclick="showTab('els')">→ 이동</span></p>`:""}
     ${dueF.length?`<p style="margin-bottom:8px"><span class="due-badge">펀드 만기 임박</span> 30일 이내 <b>${dueF.length}건</b> — ${dueF.slice(0,5).map(f=>esc(f.client_name)+"("+(f.maturity||"")+")").join(", ")}${dueF.length>5?" 외":""} <span class="clickable" onclick="showTab('funds')">→ 이동</span></p>`:""}
     ${staleH.length?`<p><span class="due-badge">편입종목 갱신</span> 랩고객 <b>${staleH.length}명</b> — ${staleH.slice(0,5).map(c=>esc(c.name)).join(", ")}${staleH.length>5?" 외":""} <span class="clickable" onclick="showTab('wrap')">→ 이동</span></p>`:""}`}
   </div>
@@ -966,6 +970,76 @@ async function runImport(){
   if(!failed)setTimeout(()=>closeModal("importModal"),1800);
 }
 
+/* ---------- ELS 관리 ---------- */
+function renderEls(){
+  const t=today();
+  const soon=new Date();soon.setDate(soon.getDate()+30);const soonStr=soon.toISOString().slice(0,10);
+  const list=elsList.slice().sort((a,b)=>((a.join_date)||"9999-99-99").localeCompare((b.join_date)||"9999-99-99"));
+  const aSum=list.reduce((x,f)=>x+Number(f.amount||0),0);
+  $("tab-els").innerHTML=`
+  <div class="toolbar">
+    <span class="mini">만기 30일 이내인 건은 강조 표시됩니다.</span>
+    <div style="flex:1"></div>
+    <button class="btn btn-p" onclick="openElsModal()">+ ELS 등록</button>
+  </div>
+  <div class="panel" style="padding:0;overflow-x:auto">
+    <table><thead><tr><th>가입고객</th><th>가입일</th><th>금액(억원)</th><th>만기일</th><th>내용</th><th></th></tr></thead><tbody>
+    ${list.length?list.map(x=>{
+      const due=x.maturity&&x.maturity>=t&&x.maturity<=soonStr;
+      const passed=x.maturity&&x.maturity<t;
+      return `<tr class="${due?"due":""}">
+      <td><b>${esc(x.client_name)}</b></td>
+      <td>${x.join_date||"-"}</td>
+      <td>${fmt(x.amount)}</td>
+      <td>${x.maturity||"-"} ${due?'<span class="due-badge">만기임박</span>':""}${passed?'<span class="due-badge">만기경과</span>':""}</td>
+      <td style="white-space:pre-wrap;max-width:420px" class="mini">${esc(x.content||"-")}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-s btn-sm" onclick="openElsModal('${x.id}')">수정</button>
+        <button class="btn btn-d btn-sm" onclick="delEls('${x.id}')">삭제</button>
+      </td></tr>`}).join("")
+      +`<tr style="background:#f8f9fb;font-weight:700"><td>합계 (${list.length}건)</td><td></td><td>${fmt(aSum)}</td><td colspan="3"></td></tr>`
+      :'<tr><td colspan="6"><div class="empty">등록된 ELS가 없습니다. \'+ ELS 등록\' 버튼으로 시작하세요.</div></td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+function openElsModal(id){
+  const x=id?elsList.find(v=>v.id===id):null;
+  $("elsModalTitle").textContent=x?"ELS 수정":"ELS 등록";
+  $("e_id").value=x?x.id:"";
+  $("e_client").value=x?x.client_name:"";
+  $("e_join").value=x?(x.join_date||""):"";
+  $("e_amount").value=x?(x.amount??""):"";
+  $("e_maturity").value=x?(x.maturity||""):"";
+  $("e_content").value=x?(x.content||""):"";
+  $("elsModal").classList.add("open");
+}
+async function saveEls(){
+  const client_name=$("e_client").value.trim();
+  if(!client_name){alert("가입고객을 입력하세요.");return}
+  const id=$("e_id").value;
+  const row={
+    client_name,
+    join_date:$("e_join").value||null,
+    amount:$("e_amount").value===""?null:Number($("e_amount").value),
+    maturity:$("e_maturity").value||null,
+    content:$("e_content").value.trim()||null
+  };
+  const q = id ? db.from("els").update(row).eq("id",id) : db.from("els").insert(row);
+  const {error}=await q;
+  if(error){err(error);return}
+  closeModal("elsModal");
+  await loadAll();
+  showTab("els");
+}
+async function delEls(id){
+  const x=elsList.find(v=>v.id===id);if(!x)return;
+  if(!confirm(`'${x.client_name}'님의 ELS를 삭제할까요?`))return;
+  const {error}=await db.from("els").delete().eq("id",id);
+  if(error){err(error);return}
+  await loadAll();
+  showTab("els");
+}
+
 /* ---------- 자료실 ---------- */
 function fmtSize(b){if(b==null)return"";if(b>1048576)return(b/1048576).toFixed(1)+" MB";if(b>1024)return(b/1024).toFixed(0)+" KB";return b+" B"}
 function renderDocs(){
@@ -1067,5 +1141,5 @@ async function delDoc(id){
 /* ---------- 공통 ---------- */
 function closeModal(id){$(id).classList.remove("open")}
 document.querySelectorAll(".modal-bg").forEach(m=>m.addEventListener("click",e=>{if(e.target===m)m.classList.remove("open")}));
-function renderAll(){renderDash();renderClients();renderReturns();renderWrap();renderFunds();renderProspects();renderDocs()}
+function renderAll(){renderDash();renderClients();renderReturns();renderWrap();renderFunds();renderProspects();renderEls();renderDocs()}
 boot();
