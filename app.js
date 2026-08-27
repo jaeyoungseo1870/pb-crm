@@ -1049,7 +1049,7 @@ function renderDocs(){
     <h2>자료 올리기</h2>
     <div class="frow" style="grid-template-columns:1fr 1fr;gap:8px;align-items:end">
       <div class="fg"><label>제목 *</label><input id="doc_title" placeholder="예: 2026년 하반기 시장 전망"></div>
-      <div class="fg"><label>파일 * (PPT, PDF, Excel, Word, 이미지 등)</label><input id="doc_file" type="file"></div>
+      <div class="fg"><label>파일 (선택 — PPT, PDF, Excel, Word, 이미지 등)</label><input id="doc_file" type="file"></div>
     </div>
     <div class="frow full" style="margin-bottom:8px">
       <div class="fg"><label>관심고객 (여러 줄 입력 가능)</label>
@@ -1063,11 +1063,11 @@ function renderDocs(){
     <table><thead><tr><th>제목</th><th>파일명</th><th>관심고객</th><th>등록일</th><th></th></tr></thead><tbody>
     ${list.length?list.map(d=>`<tr>
       <td><b>${esc(d.title)}</b></td>
-      <td class="mini">${esc(d.file_name)}</td>
+      <td class="mini">${esc(d.file_name||"-")}</td>
       <td style="white-space:pre-wrap;max-width:340px">${esc(d.interest_clients||"-")}</td>
       <td class="mini">${(d.created_at||"").slice(0,10)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-p btn-sm" onclick="downloadDoc('${d.id}')">열기/다운로드</button>
+        ${d.file_path?`<button class="btn btn-p btn-sm" onclick="downloadDoc('${d.id}')">열기/다운로드</button>`:""}
         <button class="btn btn-s btn-sm" onclick="openDocEdit('${d.id}')">수정</button>
         <button class="btn btn-d btn-sm" onclick="delDoc('${d.id}')">삭제</button>
       </td></tr>`).join(""):'<tr><td colspan="5"><div class="empty">등록된 자료가 없습니다. 위에서 첫 자료를 올려보세요.</div></td></tr>'}
@@ -1079,17 +1079,20 @@ async function uploadDoc(){
   const fileInput=$("doc_file");
   const file=fileInput.files[0];
   if(!title){alert("제목을 입력하세요.");return}
-  if(!file){alert("파일을 선택하세요.");return}
-  if(file.size>50*1024*1024){alert("파일이 50MB를 넘습니다. 더 작은 파일로 올려주세요.");return}
+  if(file && file.size>50*1024*1024){alert("파일이 50MB를 넘습니다. 더 작은 파일로 올려주세요.");return}
   const btn=$("doc_upBtn"); btn.disabled=true; btn.textContent="업로드 중...";
-  $("doc_msg").textContent="파일을 올리는 중입니다... ("+fmtSize(file.size)+")";
+  $("doc_msg").textContent=file?"파일을 올리는 중입니다... ("+fmtSize(file.size)+")":"등록 중입니다...";
   try{
-    const ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,"")||"bin";
-    const path=Date.now()+"_"+Math.random().toString(36).slice(2,8)+"."+ext;
-    const {error:upErr}=await db.storage.from("docs").upload(path,file);
-    if(upErr)throw upErr;
+    let path=null, fname=null;
+    if(file){
+      const ext=(file.name.split(".").pop()||"bin").toLowerCase().replace(/[^a-z0-9]/g,"")||"bin";
+      path=Date.now()+"_"+Math.random().toString(36).slice(2,8)+"."+ext;
+      const {error:upErr}=await db.storage.from("docs").upload(path,file);
+      if(upErr)throw upErr;
+      fname=file.name;
+    }
     const {error:insErr}=await db.from("documents").insert({
-      title, file_name:file.name, file_path:path, uploaded_by:me.name,
+      title, file_name:fname, file_path:path, uploaded_by:me.name,
       interest_clients:$("doc_interest")?$("doc_interest").value.trim()||null:null
     });
     if(insErr)throw insErr;
@@ -1123,7 +1126,7 @@ async function saveDocEdit(){
   showTab("docs");
 }
 async function downloadDoc(id){
-  const d=docs.find(x=>x.id===id);if(!d)return;
+  const d=docs.find(x=>x.id===id);if(!d||!d.file_path)return;
   const {data,error}=await db.storage.from("docs").createSignedUrl(d.file_path,3600);
   if(error){err(error);return}
   window.open(data.signedUrl,"_blank");
@@ -1131,7 +1134,7 @@ async function downloadDoc(id){
 async function delDoc(id){
   const d=docs.find(x=>x.id===id);if(!d)return;
   if(!confirm(`'${d.title}' 자료를 삭제할까요?`))return;
-  await db.storage.from("docs").remove([d.file_path]);
+  if(d.file_path) await db.storage.from("docs").remove([d.file_path]);
   const {error}=await db.from("documents").delete().eq("id",id);
   if(error){err(error);return}
   await loadAll();
