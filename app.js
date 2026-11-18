@@ -117,13 +117,14 @@ async function loadAll(manual){
   elsList = e.error ? [] : e.data;    // els 테이블 미생성 시에도 앱은 동작
   $("teamSub").textContent = "팀원: "+(managers.join(" · ")||"-");
   renderAll();
+  loadSemi();
   if(manual){const el=$("teamSub");el.style.color="#ffd166";setTimeout(()=>el.style.color="",700)}
 }
 
 /* ---------- 탭 ---------- */
 function showTab(t){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
-  ["dash","clients","returns","wrap","funds","prospects","els","docs"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
+  ["dash","clients","returns","wrap","funds","prospects","els","docs","semi"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
 }
 
 /* ---------- 대시보드 ---------- */
@@ -1139,6 +1140,258 @@ async function delDoc(id){
   if(error){err(error);return}
   await loadAll();
   showTab("docs");
+}
+
+/* ---------- 반도체 인텔리전스 (본인 전용) ---------- */
+const SEMI_USERS = ["서재영"];   // 이 메뉴를 볼 수 있는 사용자 이름
+const SEMI_CHAINS = ["메모리","파운드리·비메모리","팹리스·설계","장비","소재","부품","후공정·테스트","기타"];
+let semiStocks = [], semiBriefs = [], semiReady = false;
+let semiSub = "stocks", semiDate = null, semiEditId = null;
+let semiF = {mkt:"", chain:"", q:"", nMkt:"국내", nChain:"", nImp:"", nStar:0, rMkt:"", rType:"", iType:""};
+
+function semiAllowed(){return me && SEMI_USERS.includes(me.name)}
+async function loadSemi(){
+  const btn=document.querySelector('nav button[data-tab="semi"]');
+  if(btn) btn.style.display = semiAllowed()?"":"none";
+  if(!semiAllowed()){$("tab-semi").innerHTML="";return}
+  const [s,b]=await Promise.all([
+    db.from("semi_stocks").select("*").order("created_at"),
+    db.from("semi_briefs").select("*").order("brief_date",{ascending:false}),
+  ]);
+  semiReady = !s.error && !b.error;
+  semiStocks = s.error?[]:s.data; semiBriefs = b.error?[]:b.data;
+  if(!semiBriefs.find(x=>x.brief_date===semiDate)) semiDate = semiBriefs[0]?.brief_date||null;
+  renderSemi();
+}
+function semiFind(key){if(!key)return null;const k=String(key).trim().toLowerCase();return semiStocks.find(s=>(s.code||"").toLowerCase()===k||(s.name||"").toLowerCase()===k)}
+function semiBrief(){return semiBriefs.find(b=>b.brief_date===semiDate)||{news:[],reports:[],issues:[]}}
+function semiImpTag(v){v=v||"중립";const st=v==="호재"?"background:#fdeceb;color:var(--pos)":v==="악재"?"background:#e6eefb;color:var(--neg)":"background:#eef0f4;color:#5a6580";return `<span class="tag" style="${st}">${esc(v)}</span>`}
+function semiStockTag(s){return `<span class="tag" style="background:var(--brass-soft);color:#7a5c1e">${esc(s.name)}</span>`}
+function semiStars(n){n=Math.max(1,Math.min(3,Number(n)||1));return `<span style="color:var(--brass);letter-spacing:1px">${"★".repeat(n)}</span><span style="color:#d5d9e1;letter-spacing:1px">${"★".repeat(3-n)}</span>`}
+function semiLink(x){return x.url?` · <a href="${esc(x.url)}" target="_blank" rel="noopener" style="color:#1d4ed8">원문</a>`:""}
+function semiSel(id,opts,val,all){return `<select id="${id}" onchange="semiSet()">${all?`<option value="">${all}</option>`:""}${opts.map(o=>{const [v,l]=Array.isArray(o)?o:[o,o];return `<option value="${esc(v)}" ${String(v)===String(val)?"selected":""}>${esc(l)}</option>`}).join("")}</select>`}
+function semiSet(){
+  const g=id=>$(id)?$(id).value:undefined;
+  ["mkt","chain","q","nMkt","nChain","nImp","nStar","rMkt","rType","iType"].forEach(k=>{const v=g("sf_"+k);if(v!==undefined)semiF[k]=v});
+  if($("sf_date")) semiDate=$("sf_date").value||semiDate;
+  renderSemi();
+}
+function semiGo(t){semiSub=t;renderSemi()}
+function semiEmpty(t,s){return `<div class="empty"><b style="display:block;color:#5a6580;margin-bottom:4px">${t}</b>${s||""}</div>`}
+
+function renderSemi(){
+  if(!semiAllowed())return;
+  const subs=[["stocks","관심종목",semiStocks.length],["news","종목 뉴스",null],["reports","리포트",null],["issues","산업 이슈",null]];
+  let body="";
+  if(!semiReady) body=`<div class="panel">${semiEmpty("데이터베이스 준비가 필요합니다","Supabase SQL Editor에서 upgrade-semi.sql 을 한 번 실행한 뒤 새로고침하세요.")}</div>`;
+  else if(semiSub==="stocks") body=semiStocksHtml();
+  else body=semiDateBar()+(semiSub==="news"?semiNewsHtml():semiSub==="reports"?semiRepHtml():semiIssHtml())+semiImportHtml();
+  $("tab-semi").innerHTML=`
+    <div class="subnav">${subs.map(([k,l,n])=>`<button class="${semiSub===k?"on":""}" onclick="semiGo('${k}')">${l}${n?` <span style="opacity:.6">${n}</span>`:""}</button>`).join("")}
+      <span style="flex:1"></span><span class="mini">🔒 본인 전용 · 다른 팀원에게는 보이지 않습니다</span></div>
+    ${body}`;
+}
+
+/* 관심종목 관리 */
+function semiStocksHtml(){
+  const pr={"상":0,"중":1,"하":2};
+  const q=(semiF.q||"").toLowerCase();
+  const rows=semiStocks.filter(s=>(!semiF.mkt||s.market===semiF.mkt)&&(!semiF.chain||s.chain===semiF.chain)&&(!q||(s.name||"").toLowerCase().includes(q)||(s.code||"").toLowerCase().includes(q)))
+    .sort((a,b)=>(a.market||"").localeCompare(b.market||"")||(pr[a.priority]??1)-(pr[b.priority]??1)||(a.name||"").localeCompare(b.name||""));
+  const e=semiEditId?semiStocks.find(s=>s.id===semiEditId):null;
+  const cnt=m=>semiStocks.filter(s=>s.market===m).length;
+  return `
+  <div class="cards">
+    <div class="card"><div class="lbl">전체 종목</div><div class="val">${semiStocks.length}<small>개</small></div></div>
+    <div class="card"><div class="lbl">국내</div><div class="val">${cnt("국내")}<small>개</small></div></div>
+    <div class="card"><div class="lbl">해외</div><div class="val">${cnt("해외")}<small>개</small></div></div>
+    <div class="card"><div class="lbl">우선순위 상</div><div class="val">${semiStocks.filter(s=>s.priority==="상").length}<small>개</small></div></div>
+  </div>
+  <div class="panel">
+    <h2>${e?"종목 수정":"종목 추가"}</h2>
+    <div class="frow" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="fg"><label>종목명 *</label><input id="ss_name" value="${esc(e?.name||"")}" placeholder="SK하이닉스"></div>
+      <div class="fg"><label>코드/티커 *</label><input id="ss_code" value="${esc(e?.code||"")}" placeholder="000660"></div>
+      <div class="fg"><label>구분</label><select id="ss_mkt">${["국내","해외"].map(m=>`<option ${e?.market===m?"selected":""}>${m}</option>`).join("")}</select></div>
+      <div class="fg"><label>밸류체인</label><select id="ss_chain">${SEMI_CHAINS.map(c=>`<option ${e?.chain===c?"selected":""}>${c}</option>`).join("")}</select></div>
+      <div class="fg"><label>우선순위</label><select id="ss_pri">${["상","중","하"].map(p=>`<option ${(e?.priority||"중")===p?"selected":""}>${p}</option>`).join("")}</select></div>
+      <div class="fg"><label>추적 키워드</label><input id="ss_kw" value="${esc(e?.keywords||"")}" placeholder="HBM, DDR5"></div>
+    </div>
+    <div class="msg" id="ss_msg"></div>
+    <button class="btn btn-p" onclick="semiSaveStock()">${e?"수정 저장":"종목 추가"}</button>
+    ${e?`<button class="btn btn-s" onclick="semiEditId=null;renderSemi()">취소</button>`:""}
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brass)">엑셀에서 일괄 등록</summary>
+      <p class="mini" style="margin:8px 0">엑셀에서 6개 열을 이 순서로 복사해 붙여넣으세요 (한 줄에 한 종목). 같은 코드는 갱신됩니다.<br>종목명 · 코드 · 구분(국내/해외) · 밸류체인 · 키워드 · 우선순위(상/중/하)</p>
+      <div class="fg"><textarea id="ss_bulk" style="min-height:120px;font-family:Consolas,monospace;font-size:12px" placeholder="SK하이닉스&#9;000660&#9;국내&#9;메모리&#9;HBM, DDR5&#9;상&#10;Micron&#9;MU&#9;해외&#9;메모리&#9;HBM&#9;상"></textarea></div>
+      <div class="msg" id="ss_bmsg"></div>
+      <button class="btn btn-p" style="margin-top:8px" onclick="semiBulk()">일괄 등록</button>
+    </details>
+  </div>
+  <div class="toolbar">
+    ${semiSel("sf_mkt",["국내","해외"],semiF.mkt,"구분 전체")}
+    ${semiSel("sf_chain",SEMI_CHAINS,semiF.chain,"밸류체인 전체")}
+    <input type="text" id="sf_q" value="${esc(semiF.q)}" placeholder="종목명·코드 검색" onkeydown="if(event.key==='Enter')semiSet()">
+    <button class="btn btn-s" onclick="semiSet()">검색</button>
+    <span style="flex:1"></span>
+    <button class="btn btn-s btn-sm" onclick="semiCopyList()">종목 리스트 복사</button>
+  </div>
+  <div class="panel" style="padding:0;overflow-x:auto">
+    <table><thead><tr><th>종목</th><th>코드</th><th>구분</th><th>밸류체인</th><th>키워드</th><th>우선</th><th></th></tr></thead><tbody>
+    ${rows.length?rows.map(s=>`<tr>
+      <td><b>${esc(s.name)}</b></td><td class="mini">${esc(s.code)}</td><td>${esc(s.market)}</td>
+      <td><span class="tag" style="background:#eef0f4;color:#475569">${esc(s.chain)}</span></td>
+      <td class="mini">${esc(s.keywords||"")}</td>
+      <td>${s.priority==="상"?`<span class="grade g-VIP">상</span>`:`<span class="grade g-B">${esc(s.priority||"중")}</span>`}</td>
+      <td style="white-space:nowrap"><button class="btn btn-s btn-sm" onclick="semiEditId='${s.id}';renderSemi();window.scrollTo({top:0,behavior:'smooth'})">수정</button>
+        <button class="btn btn-d btn-sm" onclick="semiDelStock('${s.id}')">삭제</button></td></tr>`).join("")
+      :`<tr><td colspan="7">${semiEmpty(semiStocks.length?"조건에 맞는 종목이 없습니다":"관심종목을 등록해 주세요",semiStocks.length?"":"위 입력란이나 엑셀 일괄 등록을 사용하세요")}</td></tr>`}
+    </tbody></table>
+  </div>`;
+}
+function semiNormMkt(v){return /해외|us|global|overseas|미국|일본|대만/i.test(v||"")?"해외":"국내"}
+function semiNormChain(v){v=(v||"").replace(/[\s·\/]/g,"");if(!v)return "기타";return SEMI_CHAINS.find(c=>c.replace(/·/g,"").includes(v)||v.includes(c.split("·")[0]))||"기타"}
+function semiNormPri(v){v=(v||"").trim();return ["상","중","하"].includes(v)?v:"중"}
+async function semiSaveStock(){
+  const row={name:$("ss_name").value.trim(),code:$("ss_code").value.trim(),market:$("ss_mkt").value,chain:$("ss_chain").value,priority:$("ss_pri").value,keywords:$("ss_kw").value.trim()||null};
+  if(!row.name||!row.code){showMsg("ss_msg","종목명과 코드를 입력하세요.");return}
+  const dup=semiStocks.find(s=>s.code.toLowerCase()===row.code.toLowerCase()&&s.id!==semiEditId);
+  if(dup){showMsg("ss_msg",`이미 등록된 코드입니다 (${dup.name}).`);return}
+  const {error}=semiEditId?await db.from("semi_stocks").update(row).eq("id",semiEditId):await db.from("semi_stocks").insert({...row,owner:me.id});
+  if(error){err(error);return}
+  semiEditId=null; await loadSemi();
+}
+async function semiBulk(){
+  const lines=$("ss_bulk").value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){showMsg("ss_bmsg","붙여넣은 내용이 없습니다.");return}
+  const map=new Map();let skip=0;
+  lines.forEach(l=>{const c=l.split(/\t|,(?![^"]*")/).map(x=>x.replace(/^"|"$/g,"").trim());
+    if(c.length<2||!c[0]||!c[1]||/종목명/.test(c[0])){skip++;return}
+    map.set(c[1].toLowerCase(),{owner:me.id,name:c[0],code:c[1],market:semiNormMkt(c[2]),chain:semiNormChain(c[3]),keywords:c[4]||null,priority:semiNormPri(c[5])})});
+  const rows=[...map.values()];
+  if(!rows.length){showMsg("ss_bmsg","인식된 종목이 없습니다. 열 순서를 확인하세요.");return}
+  const upd=rows.filter(r=>semiFind(r.code)).length;
+  const {error}=await db.from("semi_stocks").upsert(rows,{onConflict:"owner,code"});
+  if(error){err(error);return}
+  await loadSemi();
+  $("ss_bulk").closest("details").open=true;
+  showMsg("ss_bmsg",`추가 ${rows.length-upd} · 갱신 ${upd}${skip?` · 건너뜀 ${skip}`:""}`,true);
+}
+async function semiDelStock(id){
+  const s=semiStocks.find(x=>x.id===id);if(!s)return;
+  if(!confirm(`'${s.name}' 종목을 관심종목에서 삭제할까요?`))return;
+  const {error}=await db.from("semi_stocks").delete().eq("id",id);
+  if(error){err(error);return}
+  await loadSemi();
+}
+async function semiCopyList(){
+  const t=semiStocks.map(s=>[s.name,s.code,s.market,s.chain,s.keywords||"",s.priority].join("\t")).join("\n");
+  try{await navigator.clipboard.writeText(t);alert(`${semiStocks.length}개 종목을 복사했습니다.`)}catch(e){alert("복사가 차단되었습니다.")}
+}
+
+/* 공통: 일자 선택 / 데이터 불러오기 */
+function semiDateBar(){
+  const b=semiBrief();
+  return `<div class="toolbar"><span class="mini">브리핑 일자</span>
+    <select id="sf_date" onchange="semiSet()">${semiBriefs.length?semiBriefs.map(x=>`<option ${x.brief_date===semiDate?"selected":""}>${x.brief_date}</option>`).join(""):"<option>데이터 없음</option>"}</select>
+    ${b.generated_at?`<span class="mini">생성 ${esc(b.generated_at)}</span>`:""}</div>`;
+}
+function semiGuard(){
+  if(!semiStocks.length) return semiEmpty("관심종목이 없습니다","관심종목 메뉴에서 종목을 먼저 등록하세요.");
+  if(!semiDate) return semiEmpty("아직 브리핑이 없습니다","아래 '일일 브리핑 데이터 불러오기'로 데이터를 넣으면 표시됩니다.");
+  return null;
+}
+function semiImportHtml(){
+  return `<details class="panel" style="margin-top:18px">
+    <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brass)">일일 브리핑 데이터 불러오기</summary>
+    <p class="mini" style="margin:8px 0">매일 생성되는 브리핑 데이터(JSON)를 붙여넣으세요. 같은 일자는 덮어씁니다.</p>
+    <div class="fg"><textarea id="sb_json" style="min-height:120px;font-family:Consolas,monospace;font-size:12px" placeholder='{"date":"2026-11-18","news":[...],"reports":[...],"issues":[...]}'></textarea></div>
+    <div class="msg" id="sb_msg"></div>
+    <button class="btn btn-p" style="margin-top:8px" onclick="semiImport()">불러오기</button>
+    ${semiDate?`<button class="btn btn-d" style="margin-top:8px" onclick="semiDelBrief()">${esc(semiDate)} 브리핑 삭제</button>`:""}
+  </details>`;
+}
+async function semiImport(){
+  let arr;
+  try{const d=JSON.parse($("sb_json").value);arr=Array.isArray(d)?d:[d];if(arr.some(b=>!/^\d{4}-\d{2}-\d{2}$/.test(b.date||"")))throw new Error("date(YYYY-MM-DD) 항목이 없습니다")}
+  catch(e){showMsg("sb_msg","형식 오류: "+e.message);return}
+  const rows=arr.map(b=>({owner:me.id,brief_date:b.date,news:b.news||[],reports:b.reports||[],issues:b.issues||[],generated_at:b.generated||null}));
+  const {error}=await db.from("semi_briefs").upsert(rows,{onConflict:"owner,brief_date"});
+  if(error){err(error);return}
+  semiDate=rows[rows.length-1].brief_date;
+  await loadSemi();
+  $("sb_json").closest("details").open=true;
+  showMsg("sb_msg",`${rows.length}일치 불러왔습니다.`,true);
+}
+async function semiDelBrief(){
+  if(!confirm(`${semiDate} 브리핑을 삭제할까요?`))return;
+  const {error}=await db.from("semi_briefs").delete().eq("brief_date",semiDate).eq("owner",me.id);
+  if(error){err(error);return}
+  semiDate=null; await loadSemi();
+}
+
+/* 종목 뉴스 */
+function semiNewsHtml(){
+  const g=semiGuard();
+  const all=(semiBrief().news||[]).map(n=>({...n,st:semiFind(n.code||n.name)})).filter(n=>n.st);
+  const f=all.filter(n=>n.st.market===semiF.nMkt&&(!semiF.nChain||n.st.chain===semiF.nChain)&&(!semiF.nImp||(n.impact||"중립")===semiF.nImp)&&(Number(n.importance)||1)>=Number(semiF.nStar||0));
+  let list="";
+  if(g) list=g;
+  else if(!f.length) list=semiEmpty("해당 조건의 뉴스가 없습니다","필터를 바꿔보세요.");
+  else SEMI_CHAINS.forEach(c=>{const gr=f.filter(n=>n.st.chain===c).sort((a,b)=>(b.importance||1)-(a.importance||1));if(!gr.length)return;
+    list+=`<div class="panel"><h2>${c} <span class="mini" style="font-weight:500">${gr.length}건</span></h2>`+gr.map(n=>`
+      <div style="padding:12px 0;border-top:1px solid #eef0f4">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${semiStockTag(n.st)}${semiImpTag(n.impact)}${semiStars(n.importance)}</div>
+        <div style="font-size:14px;font-weight:700;margin:6px 0 4px">${esc(n.title)}</div>
+        <div style="font-size:13px;color:var(--ink-soft);line-height:1.6">${esc(n.summary||"")}</div>
+        <div class="mini" style="margin-top:6px">${esc(n.source||"")}${n.time?" · "+esc(n.time):""}${semiLink(n)}</div>
+      </div>`).join("")+`</div>`});
+  return `<div class="toolbar">
+    ${semiSel("sf_nMkt",["국내","해외"],semiF.nMkt)}
+    ${semiSel("sf_nChain",SEMI_CHAINS,semiF.nChain,"밸류체인 전체")}
+    ${semiSel("sf_nImp",["호재","악재","중립"],semiF.nImp,"영향 전체")}
+    ${semiSel("sf_nStar",[["3","★★★만"],["2","★★ 이상"]],semiF.nStar,"중요도 전체")}
+  </div>${list}`;
+}
+
+/* 애널리스트 리포트 */
+function semiChg(a,b){if(a==null||b==null||a===""||b==="")return "keep";return Number(b)>Number(a)?"up":Number(b)<Number(a)?"down":"keep"}
+function semiPx(v,usd){if(v==null||v==="")return "-";const n=Number(v);return isNaN(n)?esc(v):(usd?"$":"")+n.toLocaleString("ko-KR",{maximumFractionDigits:2})}
+function semiRepHtml(){
+  const g=semiGuard();
+  const all=(semiBrief().reports||[]).map(r=>({...r,st:semiFind(r.code||r.name)})).filter(r=>r.st);
+  const f=all.filter(r=>(!semiF.rMkt||r.st.market===semiF.rMkt)&&(!semiF.rType||semiChg(r.tp_prev,r.tp_new)===semiF.rType));
+  const tb=g?`<div class="panel">${g}</div>`:!f.length?`<div class="panel">${semiEmpty("해당 조건의 리포트가 없습니다","필터를 바꿔보세요.")}</div>`:
+  `<div class="panel" style="padding:0;overflow-x:auto"><table><thead><tr><th>종목</th><th>기관</th><th>투자의견</th><th>목표가</th><th>현재가 대비</th><th>핵심 논리</th></tr></thead><tbody>
+  ${f.map(r=>{const c=semiChg(r.tp_prev,r.tp_new);const usd=(r.currency||(r.st.market==="해외"?"USD":"KRW"))==="USD";
+    const pct=r.tp_prev&&r.tp_new&&c!=="keep"?((r.tp_new/r.tp_prev-1)*100):null;
+    const gap=r.tp_new&&r.price?((r.tp_new/r.price-1)*100):null;
+    return `<tr><td>${semiStockTag(r.st)}</td><td class="mini">${esc(r.broker||"-")}</td>
+    <td>${r.rating_prev&&r.rating_prev!==r.rating_new?esc(r.rating_prev)+" → ":""}<b>${esc(r.rating_new||"-")}</b></td>
+    <td style="white-space:nowrap">${r.tp_prev&&c!=="keep"?semiPx(r.tp_prev,usd)+" → ":""}<b class="${c==="up"?"pos":c==="down"?"neg":""}">${semiPx(r.tp_new,usd)}</b>${pct!=null?` <span class="mini">(${pct>0?"+":""}${pct.toFixed(1)}%)</span>`:""}</td>
+    <td>${gap==null?"-":`<span class="${gap>=0?"pos":"neg"}">${gap>=0?"+":""}${gap.toFixed(1)}%</span>`}</td>
+    <td style="min-width:220px;font-size:12px;color:var(--ink-soft)">${esc(r.thesis||"")}<div class="mini">${esc(r.source||"")}${semiLink(r)}</div></td></tr>`}).join("")}
+  </tbody></table></div>`;
+  return `<div class="toolbar">
+    ${semiSel("sf_rMkt",["국내","해외"],semiF.rMkt,"구분 전체")}
+    ${semiSel("sf_rType",[["up","목표가 상향"],["down","목표가 하향"],["keep","유지·신규"]],semiF.rType,"변경 전체")}
+  </div>${tb}`;
+}
+
+/* 산업·공급망 이슈 */
+function semiIssHtml(){
+  const g=semiGuard();
+  const types=["AI·HBM 수요","빅테크 CapEx","규제·관세·정책","업황·가격","공급망"];
+  const all=(semiBrief().issues||[]).map(x=>({...x,rel:(x.related||[]).map(k=>({k,s:semiFind(k)}))})).filter(x=>x.rel.some(r=>r.s));
+  const f=all.filter(x=>!semiF.iType||x.type===semiF.iType);
+  const list=g?`<div class="panel">${g}</div>`:!f.length?`<div class="panel">${semiEmpty("내 종목과 관련된 이슈가 없습니다","필터를 바꾸거나 다른 일자를 선택하세요.")}</div>`:
+    f.map(x=>`<div class="panel">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tag" style="background:var(--ink);color:#fff">${esc(x.type||"이슈")}</span>${semiImpTag(x.impact)}</div>
+      <div style="font-size:15px;font-weight:700;margin:8px 0 4px">${esc(x.title)}</div>
+      <div style="font-size:13px;color:var(--ink-soft);line-height:1.6">${esc(x.summary||"")}</div>
+      <div style="margin-top:8px">${x.rel.map(r=>r.s?semiStockTag(r.s):`<span class="tag" style="background:#f4f5f7;color:#98a1b3">${esc(r.k)}</span>`).join("")}</div>
+      <div class="mini" style="margin-top:6px">${esc(x.source||"")}${semiLink(x)}</div></div>`).join("");
+  return `<div class="toolbar">${semiSel("sf_iType",types,semiF.iType,"이슈 유형 전체")}</div>${list}`;
 }
 
 /* ---------- 공통 ---------- */

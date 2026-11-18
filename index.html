@@ -90,6 +90,9 @@ tr:hover td{background:#fafbfd}
 .switch a{color:var(--brass);font-weight:700;cursor:pointer}
 .notice{font-size:12px;color:#98a1b3;line-height:1.6;margin-top:10px}
 #loading{position:fixed;inset:0;background:var(--paper);display:flex;align-items:center;justify-content:center;z-index:100;font-size:14px;color:#7a8499}
+.subnav{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+.subnav button{background:#fff;border:1px solid var(--line);border-radius:20px;padding:7px 15px;font-size:13px;font-weight:600;color:#7a8499;cursor:pointer}
+.subnav button.on{background:var(--ink);border-color:var(--ink);color:#fff}
 @media(max-width:640px){.frow{grid-template-columns:1fr}th,td{padding:7px 6px;font-size:12px}}
 @media(max-width:760px){.dash-grid{grid-template-columns:1fr !important}}
 </style>
@@ -145,6 +148,7 @@ tr:hover td{background:#fafbfd}
     <button data-tab="prospects" onclick="showTab('prospects')">잠재고객</button>
     <button data-tab="els" onclick="showTab('els')">ELS</button>
     <button data-tab="docs" onclick="showTab('docs')">자료실</button>
+    <button data-tab="semi" onclick="showTab('semi')" style="display:none">반도체</button>
   </nav>
   <main>
     <section id="tab-dash"></section>
@@ -155,6 +159,7 @@ tr:hover td{background:#fafbfd}
     <section id="tab-prospects" style="display:none"></section>
     <section id="tab-els" style="display:none"></section>
     <section id="tab-docs" style="display:none"></section>
+    <section id="tab-semi" style="display:none"></section>
   </main>
 </div>
 
