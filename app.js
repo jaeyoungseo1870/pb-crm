@@ -1142,14 +1142,15 @@ async function delDoc(id){
   showTab("docs");
 }
 
-/* ---------- 반도체 인텔리전스 (본인 전용) ---------- */
-const SEMI_USERS = ["서재영"];   // 이 메뉴를 볼 수 있는 사용자 이름
+/* ---------- 반도체 인텔리전스 (팀 공유 보기 · 편집은 담당자만) ---------- */
+const SEMI_OWNER = "서재영";   // 관심종목·브리핑을 편집할 수 있는 사용자 (팀원은 보기만)
 const SEMI_CHAINS = ["메모리","파운드리·비메모리","팹리스·설계","장비","소재","부품","후공정·테스트","기타"];
 let semiStocks = [], semiBriefs = [], semiReady = false;
 let semiSub = "stocks", semiDate = null, semiEditId = null;
 let semiF = {mkt:"", chain:"", q:"", nMkt:"국내", nChain:"", nImp:"", nStar:0, rMkt:"", rType:"", iType:""};
 
-function semiAllowed(){return me && SEMI_USERS.includes(me.name)}
+function semiAllowed(){return !!me}
+function semiCanEdit(){return !!me && me.name===SEMI_OWNER}
 async function loadSemi(){
   const btn=document.querySelector('nav button[data-tab="semi"]');
   if(btn) btn.style.display = semiAllowed()?"":"none";
@@ -1188,7 +1189,7 @@ function renderSemi(){
   else body=semiDateBar()+(semiSub==="news"?semiNewsHtml():semiSub==="reports"?semiRepHtml():semiIssHtml())+semiImportHtml();
   $("tab-semi").innerHTML=`
     <div class="subnav">${subs.map(([k,l,n])=>`<button class="${semiSub===k?"on":""}" onclick="semiGo('${k}')">${l}${n?` <span style="opacity:.6">${n}</span>`:""}</button>`).join("")}
-      <span style="flex:1"></span><span class="mini">🔒 본인 전용 · 다른 팀원에게는 보이지 않습니다</span></div>
+      <span style="flex:1"></span><span class="mini">${semiCanEdit()?"👥 팀 공유 · 팀원은 보기만 가능":"👁 보기 전용 · 편집은 "+SEMI_OWNER+" 님"}</span></div>
     ${body}`;
 }
 
@@ -1207,7 +1208,7 @@ function semiStocksHtml(){
     <div class="card"><div class="lbl">해외</div><div class="val">${cnt("해외")}<small>개</small></div></div>
     <div class="card"><div class="lbl">우선순위 상</div><div class="val">${semiStocks.filter(s=>s.priority==="상").length}<small>개</small></div></div>
   </div>
-  <div class="panel">
+  ${semiCanEdit()?`<div class="panel">
     <h2>${e?"종목 수정":"종목 추가"}</h2>
     <div class="frow" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
       <div class="fg"><label>종목명 *</label><input id="ss_name" value="${esc(e?.name||"")}" placeholder="SK하이닉스"></div>
@@ -1227,7 +1228,7 @@ function semiStocksHtml(){
       <div class="msg" id="ss_bmsg"></div>
       <button class="btn btn-p" style="margin-top:8px" onclick="semiBulk()">일괄 등록</button>
     </details>
-  </div>
+  </div>`:""}
   <div class="toolbar">
     ${semiSel("sf_mkt",["국내","해외"],semiF.mkt,"구분 전체")}
     ${semiSel("sf_chain",SEMI_CHAINS,semiF.chain,"밸류체인 전체")}
@@ -1243,8 +1244,8 @@ function semiStocksHtml(){
       <td><span class="tag" style="background:#eef0f4;color:#475569">${esc(s.chain)}</span></td>
       <td class="mini">${esc(s.keywords||"")}</td>
       <td>${s.priority==="상"?`<span class="grade g-VIP">상</span>`:`<span class="grade g-B">${esc(s.priority||"중")}</span>`}</td>
-      <td style="white-space:nowrap"><button class="btn btn-s btn-sm" onclick="semiEditId='${s.id}';renderSemi();window.scrollTo({top:0,behavior:'smooth'})">수정</button>
-        <button class="btn btn-d btn-sm" onclick="semiDelStock('${s.id}')">삭제</button></td></tr>`).join("")
+      <td style="white-space:nowrap">${semiCanEdit()?`<button class="btn btn-s btn-sm" onclick="semiEditId='${s.id}';renderSemi();window.scrollTo({top:0,behavior:'smooth'})">수정</button>
+        <button class="btn btn-d btn-sm" onclick="semiDelStock('${s.id}')">삭제</button>`:""}</td></tr>`).join("")
       :`<tr><td colspan="7">${semiEmpty(semiStocks.length?"조건에 맞는 종목이 없습니다":"관심종목을 등록해 주세요",semiStocks.length?"":"위 입력란이나 엑셀 일괄 등록을 사용하세요")}</td></tr>`}
     </tbody></table>
   </div>`;
@@ -1297,11 +1298,12 @@ function semiDateBar(){
     ${b.generated_at?`<span class="mini">생성 ${esc(b.generated_at)}</span>`:""}</div>`;
 }
 function semiGuard(){
-  if(!semiStocks.length) return semiEmpty("관심종목이 없습니다","관심종목 메뉴에서 종목을 먼저 등록하세요.");
-  if(!semiDate) return semiEmpty("아직 브리핑이 없습니다","아래 '일일 브리핑 데이터 불러오기'로 데이터를 넣으면 표시됩니다.");
+  if(!semiStocks.length) return semiEmpty("관심종목이 없습니다",(semiCanEdit()?"관심종목 메뉴에서 종목을 먼저 등록하세요.":"담당자가 관심종목을 등록하면 표시됩니다."));
+  if(!semiDate) return semiEmpty("아직 브리핑이 없습니다",(semiCanEdit()?"아래 '일일 브리핑 데이터 불러오기'로 데이터를 넣으면 표시됩니다.":"매일 아침 브리핑이 올라오면 표시됩니다."));
   return null;
 }
 function semiImportHtml(){
+  if(!semiCanEdit()) return "";
   return `<details class="panel" style="margin-top:18px">
     <summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brass)">일일 브리핑 데이터 불러오기</summary>
     <p class="mini" style="margin:8px 0">매일 생성되는 브리핑 데이터(JSON)를 붙여넣으세요. 같은 일자는 덮어씁니다.</p>
