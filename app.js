@@ -1145,7 +1145,7 @@ async function delDoc(id){
 /* ---------- 반도체 인텔리전스 (팀 공유 보기 · 편집은 담당자만) ---------- */
 const SEMI_OWNER = "서재영";   // 관심종목·브리핑을 편집할 수 있는 사용자 (팀원은 보기만)
 const SEMI_CHAINS = ["메모리","파운드리·비메모리","팹리스·설계","장비","소재","부품","후공정·테스트","기타"];
-let semiStocks = [], semiBriefs = [], semiReady = false, semiAnal = [], semiAnalReady = false, semiAnalId = null, semiAnalEdit = null;
+let semiStocks = [], semiBriefs = [], semiReady = false, semiAnal = [], semiAnalReady = false, semiAnalId = null, semiAnalEdit = null, semiTechId = null, semiTechEdit = null;
 let semiSub = "stocks", semiDate = null, semiEditId = null;
 let semiF = {mkt:"", chain:"", q:"", nMkt:"국내", nChain:"", nImp:"", nStar:0, rMkt:"", rType:"", iType:""};
 
@@ -1184,11 +1184,12 @@ function semiEmpty(t,s){return `<div class="empty"><b style="display:block;color
 
 function renderSemi(){
   if(!semiAllowed())return;
-  const subs=[["stocks","관심종목",semiStocks.length],["news","종목 뉴스",null],["reports","리포트",null],["issues","산업 이슈",null],["analysis","종목분석",semiAnal.length||null]];
+  const subs=[["stocks","관심종목",semiStocks.length],["news","종목 뉴스",null],["reports","리포트",null],["issues","산업 이슈",null],["analysis","종목분석",semiAnal.filter(x=>x.kind!=="tech").length||null],["tech","기술동향",semiAnal.filter(x=>x.kind==="tech").length||null]];
   let body="";
   if(!semiReady) body=`<div class="panel">${semiEmpty("데이터베이스 준비가 필요합니다","Supabase SQL Editor에서 upgrade-semi.sql 을 한 번 실행한 뒤 새로고침하세요.")}</div>`;
   else if(semiSub==="stocks") body=semiStocksHtml();
   else if(semiSub==="analysis") body=semiAnalHtml();
+  else if(semiSub==="tech") body=semiTechHtml();
   else body=semiDateBar()+(semiSub==="news"?semiNewsHtml():semiSub==="reports"?semiRepHtml():semiIssHtml())+semiImportHtml();
   $("tab-semi").innerHTML=`
     <div class="subnav">${subs.map(([k,l,n])=>`<button class="${semiSub===k?"on":""}" onclick="semiGo('${k}')">${l}${n?` <span style="opacity:.6">${n}</span>`:""}</button>`).join("")}
@@ -1420,7 +1421,7 @@ function semiAnalHtml(){
   const cur=semiAnalId?semiAnal.find(x=>x.id===semiAnalId):null;
   if(cur) return semiAnalDetail(cur);
   const q=(semiF.aq||"").toLowerCase();
-  const rows=semiAnal.filter(x=>!q||(x.code||"").toLowerCase().includes(q)||(x.title||"").toLowerCase().includes(q)||((semiFind(x.code)||{}).name||"").toLowerCase().includes(q));
+  const rows=semiAnal.filter(x=>x.kind!=="tech").filter(x=>!q||(x.code||"").toLowerCase().includes(q)||(x.title||"").toLowerCase().includes(q)||((semiFind(x.code)||{}).name||"").toLowerCase().includes(q));
   const form=semiCanEdit()?semiAnalForm():"";
   return `${form}<div class="toolbar"><input type="text" id="sf_aq" value="${esc(semiF.aq||"")}" placeholder="종목명·제목 검색" onkeydown="if(event.key==='Enter'){semiF.aq=this.value;renderSemi()}">
     <button class="btn btn-s" onclick="semiF.aq=$('sf_aq').value;renderSemi()">검색</button></div>
@@ -1476,12 +1477,76 @@ async function semiAnalSave(){
   if(error){err(error);return}
   semiAnalEdit=null; semiAnalId=data&&data[0]?data[0].id:null; await loadSemi();
 }
-async function semiAnalDel(id){
-  if(!confirm("이 종목분석을 삭제할까요?"))return;
+async function semiAnalDel(id,kind){
+  if(!confirm(kind==="tech"?"이 기술동향을 삭제할까요?":"이 종목분석을 삭제할까요?"))return;
   const {error}=await db.from("semi_analysis").delete().eq("id",id);
   if(error){err(error);return}
-  semiAnalId=null; await loadSemi();
+  semiAnalId=null; semiTechId=null; await loadSemi();
 }
+/* 기술동향 (반도체 기술 트렌드·리포트 요약) */
+const SEMI_TECH_CATS=["HBM·메모리","첨단 패키징","공정·노드","장비","소재","AI 가속기","기판·부품","기타"];
+function semiRelTags(t){return (t||"").split(",").map(x=>x.trim()).filter(Boolean).map(k=>{const st=semiFind(k);return st?semiStockTag(st):`<span class="tag" style="background:#f4f5f7;color:#5a6580">${esc(k)}</span>`}).join("")}
+function semiTechHtml(){
+  if(!semiAnalReady) return `<div class="panel">${semiEmpty("데이터베이스 준비가 필요합니다","Supabase SQL Editor에서 upgrade-semi-analysis.sql, upgrade-semi-tech.sql 을 실행한 뒤 새로고침하세요.")}</div>`;
+  const all=semiAnal.filter(x=>x.kind==="tech");
+  const cur=semiTechId?all.find(x=>x.id===semiTechId):null;
+  if(cur) return semiTechDetail(cur);
+  const q=(semiF.tq||"").toLowerCase(), cat=semiF.tcat||"";
+  const rows=all.filter(x=>(!cat||x.category===cat)&&(!q||(x.title||"").toLowerCase().includes(q)||(x.related||"").toLowerCase().includes(q)||(x.summary||"").toLowerCase().includes(q)));
+  const cats=SEMI_TECH_CATS.filter(c=>all.some(x=>x.category===c));
+  return `${semiCanEdit()?semiTechForm():""}
+  <div class="toolbar"><select onchange="semiF.tcat=this.value;renderSemi()"><option value="">기술 분야 전체</option>${SEMI_TECH_CATS.map(c=>`<option ${cat===c?"selected":""}>${c}</option>`).join("")}</select>
+    <input type="text" id="sf_tq" value="${esc(semiF.tq||"")}" placeholder="제목·관련 종목 검색" onkeydown="if(event.key==='Enter'){semiF.tq=this.value;renderSemi()}">
+    <button class="btn btn-s" onclick="semiF.tq=$('sf_tq').value;renderSemi()">검색</button></div>
+  ${rows.length?rows.map(x=>`<div class="panel" style="cursor:pointer" onclick="semiTechId='${x.id}';renderSemi();window.scrollTo({top:0})">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tag" style="background:var(--ink);color:#fff">${esc(x.category||"기타")}</span><span class="mini">${esc(x.analysis_date||"")}</span></div>
+      <div style="font-size:15px;font-weight:700;margin:8px 0 4px">${esc(x.title)}</div>
+      <div style="font-size:13px;color:var(--ink-soft);line-height:1.6">${esc(x.summary||"")}</div>
+      ${x.related?`<div style="margin-top:8px">${semiRelTags(x.related)}</div>`:""}
+      <div class="mini" style="margin-top:6px;color:var(--brass)">자세히 보기 →</div></div>`).join(""):semiEmpty("등록된 기술동향이 없습니다",semiCanEdit()?"위의 '기술동향 작성'에서 추가하세요.":"담당자가 기술동향을 등록하면 표시됩니다.")}`;
+}
+function semiTechDetail(x){
+  const src=Array.isArray(x.sources)?x.sources:[];
+  return `<div class="toolbar"><button class="btn btn-s" onclick="semiTechId=null;renderSemi()">← 목록</button><span style="flex:1"></span>
+    ${semiCanEdit()?`<button class="btn btn-s btn-sm" onclick="semiTechEdit='${x.id}';semiTechId=null;renderSemi();window.scrollTo({top:0})">수정</button>
+    <button class="btn btn-d btn-sm" onclick="semiAnalDel('${x.id}','tech')">삭제</button>`:""}</div>
+  <div class="panel">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tag" style="background:var(--ink);color:#fff">${esc(x.category||"기타")}</span><span class="mini">${esc(x.analysis_date||"")}</span></div>
+    <div style="font-size:18px;font-weight:800;margin:10px 0 6px">${esc(x.title)}</div>
+    ${x.related?`<div style="margin-bottom:8px"><span class="mini" style="margin-right:4px">관련 종목</span>${semiRelTags(x.related)}</div>`:""}
+    ${x.summary?`<div style="background:var(--brass-soft);border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;margin-bottom:6px">${esc(x.summary)}</div>`:""}
+    <div style="font-size:13px;color:var(--ink)">${semiMd(x.content)}</div>
+    ${src.length?`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:10px"><div class="mini" style="font-weight:700;margin-bottom:4px">출처</div>${src.map(s=>`<div class="mini">· ${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#1d4ed8">${esc(s.title||s.url)}</a>`:esc(s.title||"")}</div>`).join("")}</div>`:""}
+  </div>`;
+}
+function semiTechForm(){
+  const e=semiTechEdit?semiAnal.find(x=>x.id===semiTechEdit):null;
+  const srcTxt=e&&Array.isArray(e.sources)?e.sources.map(s=>(s.title||"")+(s.url?" | "+s.url:"")).join("\n"):"";
+  return `<details class="panel" ${e?"open":""}><summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brass)">${e?"기술동향 수정":"기술동향 작성"}</summary>
+    <div class="frow" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:10px">
+      <div class="fg"><label>기술 분야</label><select id="st_cat">${SEMI_TECH_CATS.map(c=>`<option ${(e?.category||"")===c?"selected":""}>${c}</option>`).join("")}</select></div>
+      <div class="fg"><label>작성일</label><input type="date" id="st_date" value="${esc(e?.analysis_date||new Date().toISOString().slice(0,10))}"></div>
+      <div class="fg"><label>관련 종목 (쉼표로 구분)</label><input id="st_rel" value="${esc(e?.related||"")}" placeholder="SK하이닉스, 한미반도체"></div>
+    </div>
+    <div class="fg"><label>제목 *</label><input id="st_title" value="${esc(e?.title||"")}" placeholder="예: HBM4 하이브리드 본딩 도입 일정과 장비 수혜"></div>
+    <div class="fg" style="margin-top:8px"><label>핵심 요약 (목록에 표시)</label><textarea id="st_sum" style="min-height:70px">${esc(e?.summary||"")}</textarea></div>
+    <div class="fg" style="margin-top:8px"><label>본문 — 기술 설명·리포트 요약 (## 소제목, - 목록, **굵게**, | 표 | 사용 가능)</label><textarea id="st_body" style="min-height:260px;font-family:Consolas,monospace;font-size:12px">${esc(e?.content||"")}</textarea></div>
+    <div class="fg" style="margin-top:8px"><label>출처 (한 줄에 하나: 제목 | URL)</label><textarea id="st_src" style="min-height:70px;font-size:12px">${esc(srcTxt)}</textarea></div>
+    <div class="msg" id="st_msg"></div>
+    <button class="btn btn-p" style="margin-top:8px" onclick="semiTechSave()">${e?"수정 저장":"등록"}</button>
+    ${e?`<button class="btn btn-s" style="margin-top:8px" onclick="semiTechEdit=null;renderSemi()">취소</button>`:""}
+  </details>`;
+}
+async function semiTechSave(){
+  const v=id=>$(id).value.trim();
+  if(!v("st_title")){showMsg("st_msg","제목을 입력하세요");return}
+  const sources=v("st_src").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.lastIndexOf("|");return i>0?{title:l.slice(0,i).trim(),url:l.slice(i+1).trim()}:(/^https?:/.test(l)?{title:l,url:l}:{title:l})});
+  const row={kind:"tech",code:null,category:v("st_cat"),related:v("st_rel")||null,analysis_date:v("st_date")||null,title:v("st_title"),summary:v("st_sum")||null,content:$("st_body").value,sources,updated_at:new Date().toISOString()};
+  const {data,error}=semiTechEdit?await db.from("semi_analysis").update(row).eq("id",semiTechEdit).select():await db.from("semi_analysis").insert({...row,owner:me.id}).select();
+  if(error){err(error);return}
+  semiTechEdit=null; semiTechId=data&&data[0]?data[0].id:null; await loadSemi();
+}
+
 
 /* ---------- 공통 ---------- */
 function closeModal(id){$(id).classList.remove("open")}
