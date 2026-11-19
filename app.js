@@ -118,13 +118,14 @@ async function loadAll(manual){
   $("teamSub").textContent = "팀원: "+(managers.join(" · ")||"-");
   renderAll();
   loadSemi();
+  loadBrazil();
   if(manual){const el=$("teamSub");el.style.color="#ffd166";setTimeout(()=>el.style.color="",700)}
 }
 
 /* ---------- 탭 ---------- */
 function showTab(t){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
-  ["dash","clients","returns","wrap","funds","prospects","els","docs","semi"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
+  ["dash","clients","returns","wrap","funds","prospects","els","docs","semi","brazil"].forEach(x=>$("tab-"+x).style.display=x===t?"":"none");
 }
 
 /* ---------- 대시보드 ---------- */
@@ -1160,7 +1161,7 @@ async function loadSemi(){
     db.from("semi_briefs").select("*").order("brief_date",{ascending:false}),
     db.from("semi_analysis").select("*").order("analysis_date",{ascending:false}).order("created_at",{ascending:false}),
   ]);
-  semiAnalReady = !a.error; semiAnal = a.error?[]:a.data;
+  semiAnalReady = !a.error; semiAnal = a.error?[]:a.data.filter(x=>x.kind!=="brazil");
   semiReady = !s.error && !b.error;
   semiStocks = s.error?[]:s.data; semiBriefs = b.error?[]:b.data;
   if(!semiBriefs.find(x=>x.brief_date===semiDate)) semiDate = semiBriefs[0]?.brief_date||null;
@@ -1484,7 +1485,7 @@ async function semiAnalDel(id,kind){
   semiAnalId=null; semiTechId=null; await loadSemi();
 }
 /* 기술동향 (반도체 기술 트렌드·리포트 요약) */
-const SEMI_TECH_CATS=["HBM·메모리","첨단 패키징","공정·노드","장비","소재","AI 가속기","기판·부품","기타"];
+const SEMI_TECH_CATS=["데일리 종합","HBM·HBF","하이브리드 본딩·패키징","4F²·차세대 D램","중국 메모리(CXMT·YMTC)","공정·노드","장비·소재","AI 가속기","기판·부품","기타"];
 function semiRelTags(t){return (t||"").split(",").map(x=>x.trim()).filter(Boolean).map(k=>{const st=semiFind(k);return st?semiStockTag(st):`<span class="tag" style="background:#f4f5f7;color:#5a6580">${esc(k)}</span>`}).join("")}
 function semiTechHtml(){
   if(!semiAnalReady) return `<div class="panel">${semiEmpty("데이터베이스 준비가 필요합니다","Supabase SQL Editor에서 upgrade-semi-analysis.sql, upgrade-semi-tech.sql 을 실행한 뒤 새로고침하세요.")}</div>`;
@@ -1495,7 +1496,7 @@ function semiTechHtml(){
   const rows=all.filter(x=>(!cat||x.category===cat)&&(!q||(x.title||"").toLowerCase().includes(q)||(x.related||"").toLowerCase().includes(q)||(x.summary||"").toLowerCase().includes(q)));
   const cats=SEMI_TECH_CATS.filter(c=>all.some(x=>x.category===c));
   return `${semiCanEdit()?semiTechForm():""}
-  <div class="toolbar"><select onchange="semiF.tcat=this.value;renderSemi()"><option value="">기술 분야 전체</option>${SEMI_TECH_CATS.map(c=>`<option ${cat===c?"selected":""}>${c}</option>`).join("")}</select>
+  <div class="toolbar"><select onchange="semiF.tcat=this.value;renderSemi()"><option value="">기술 분야 전체</option>${[...SEMI_TECH_CATS,...new Set(all.map(x=>x.category).filter(c=>c&&!SEMI_TECH_CATS.includes(c)))].map(c=>`<option ${cat===c?"selected":""}>${c}</option>`).join("")}</select>
     <input type="text" id="sf_tq" value="${esc(semiF.tq||"")}" placeholder="제목·관련 종목 검색" onkeydown="if(event.key==='Enter'){semiF.tq=this.value;renderSemi()}">
     <button class="btn btn-s" onclick="semiF.tq=$('sf_tq').value;renderSemi()">검색</button></div>
   ${rows.length?rows.map(x=>`<div class="panel" style="cursor:pointer" onclick="semiTechId='${x.id}';renderSemi();window.scrollTo({top:0})">
@@ -1547,6 +1548,105 @@ async function semiTechSave(){
   semiTechEdit=null; semiTechId=data&&data[0]?data[0].id:null; await loadSemi();
 }
 
+/* ---------- 브라질채권 (브라질경제 · 채권가격·환율 리포트 / 팀 공유 보기 · 편집은 담당자만) ---------- */
+/* 데이터: semi_analysis 테이블의 kind='brazil' 행 (category = '브라질경제' | '채권가격·환율') */
+const BR_CATS = [["econ","브라질경제"],["bond","채권가격·환율"]];
+const BR_TOPICS = {econ:["경제성장률","무역수지","물가","금리동향","재정·정책","기타"], bond:["헤알화채권(2037)","달러채권","헤알화 환율","금리·스프레드","기타"]};
+let brRows = [], brReady = false, brSub = "econ", brId = null, brEdit = null, brQ = "";
+
+function brCatName(k){return (BR_CATS.find(c=>c[0]===k)||BR_CATS[0])[1]}
+async function loadBrazil(){
+  const btn=document.querySelector('nav button[data-tab="brazil"]');
+  if(btn) btn.style.display = semiAllowed()?"":"none";
+  if(!semiAllowed()){$("tab-brazil").innerHTML="";return}
+  const {data,error}=await db.from("semi_analysis").select("*").eq("kind","brazil").order("analysis_date",{ascending:false}).order("created_at",{ascending:false});
+  brReady=!error; brRows=error?[]:data;
+  renderBrazil();
+}
+function brGo(k){brSub=k;brId=null;brEdit=null;renderBrazil();window.scrollTo({top:0})}
+function brTags(t){return (t||"").split(",").map(x=>x.trim()).filter(Boolean).map(k=>`<span class="tag" style="background:#eef4ea;color:#2f6b2f">${esc(k)}</span>`).join("")}
+function renderBrazil(){
+  if(!semiAllowed())return;
+  const cat=brCatName(brSub);
+  const all=brRows.filter(x=>x.category===cat);
+  let body;
+  if(!brReady) body=`<div class="panel">${semiEmpty("데이터베이스 준비가 필요합니다","Supabase SQL Editor에서 upgrade-semi-analysis.sql, upgrade-semi-tech.sql 을 실행한 뒤 새로고침하세요.")}</div>`;
+  else{
+    const cur=brId?all.find(x=>x.id===brId):null;
+    body = cur ? brDetail(cur) : brList(all,cat);
+  }
+  $("tab-brazil").innerHTML=`
+    <div class="subnav">${BR_CATS.map(([k,l])=>`<button class="${brSub===k?"on":""}" onclick="brGo('${k}')">${l} <span style="opacity:.6">${brRows.filter(x=>x.category===l).length||""}</span></button>`).join("")}
+      <span style="flex:1"></span><span class="mini">${semiCanEdit()?"👥 팀 공유 · 팀원은 보기만 가능":"👁 보기 전용 · 편집은 "+SEMI_OWNER+" 님"}</span></div>
+    <div class="mini" style="margin:-4px 0 10px">${brSub==="econ"?"🇧🇷 경제성장률 · 무역수지 · 물가(IPCA) · 금리동향(셀릭) 뉴스와 지표":"🇧🇷 헤알화 국채(NTN-F 2037년 만기) 가격·금리 · 달러표시 국채 가격 · 헤알화 환율(USD/BRL, BRL/KRW)"}</div>
+    ${body}`;
+}
+function brCard(x){
+  return `<div class="panel" style="cursor:pointer" onclick="brId='${x.id}';renderBrazil();window.scrollTo({top:0})">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tag" style="background:#1f6b3a;color:#fff">${esc(x.category)}</span><span class="mini">${esc(x.analysis_date||"")}</span>${brTags(x.related)}</div>
+      <div style="font-size:15px;font-weight:700;margin:8px 0 4px">${esc(x.title)}</div>
+      <div style="font-size:13px;color:var(--ink-soft);line-height:1.6">${esc(x.summary||"")}</div>
+      <div class="mini" style="margin-top:6px;color:var(--brass)">자세히 보기 →</div></div>`;
+}
+function brList(all,cat){
+  const q=(brQ||"").toLowerCase();
+  const rows=all.filter(x=>!q||(x.title||"").toLowerCase().includes(q)||(x.summary||"").toLowerCase().includes(q)||(x.related||"").toLowerCase().includes(q)||(x.content||"").toLowerCase().includes(q));
+  const latest=!q&&rows[0];
+  return `${semiCanEdit()?brForm(cat):""}
+  <div class="toolbar"><input type="text" id="br_q" value="${esc(brQ)}" placeholder="제목·내용 검색 (예: 셀릭, IPCA, 2037)" onkeydown="if(event.key==='Enter'){brQ=this.value;renderBrazil()}">
+    <button class="btn btn-s" onclick="brQ=$('br_q').value;renderBrazil()">검색</button>${brQ?`<button class="btn btn-s" onclick="brQ='';renderBrazil()">초기화</button>`:""}</div>
+  ${rows.length?`${latest?`<div class="mini" style="font-weight:700;margin:4px 0 6px">최신 리포트</div>${brBody(latest,true)}`:""}
+    ${rows.slice(latest?1:0).length?`<div class="mini" style="font-weight:700;margin:14px 0 6px">지난 리포트</div>${rows.slice(latest?1:0).map(brCard).join("")}`:""}`
+    :semiEmpty(`등록된 ${cat} 리포트가 없습니다`,semiCanEdit()?"위의 '리포트 작성'에서 추가하거나, 매일 아침 자동 리포트가 올라옵니다.":"담당자가 리포트를 등록하면 표시됩니다.")}`;
+}
+function brBody(x,inList){
+  const src=Array.isArray(x.sources)?x.sources:[];
+  return `<div class="panel">
+    <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap"><span class="tag" style="background:#1f6b3a;color:#fff">${esc(x.category)}</span><span class="mini">${esc(x.analysis_date||"")}</span>${brTags(x.related)}
+      <span style="flex:1"></span>${semiCanEdit()?`<button class="btn btn-s btn-sm" onclick="brEdit='${x.id}';brId=null;renderBrazil();window.scrollTo({top:0})">수정</button>
+      <button class="btn btn-d btn-sm" onclick="brDel('${x.id}')">삭제</button>`:""}</div>
+    <div style="font-size:18px;font-weight:800;margin:10px 0 6px">${esc(x.title)}</div>
+    ${x.summary?`<div style="background:#eef4ea;border-radius:8px;padding:12px 14px;font-size:13px;line-height:1.7;margin-bottom:6px">${esc(x.summary)}</div>`:""}
+    <div style="font-size:13px;color:var(--ink)">${semiMd(x.content)}</div>
+    ${src.length?`<div style="margin-top:16px;border-top:1px solid var(--line);padding-top:10px"><div class="mini" style="font-weight:700;margin-bottom:4px">출처</div>${src.map(s=>`<div class="mini">· ${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener" style="color:#1d4ed8">${esc(s.title||s.url)}</a>`:esc(s.title||"")}</div>`).join("")}</div>`:""}
+  </div>`;
+}
+function brDetail(x){
+  return `<div class="toolbar"><button class="btn btn-s" onclick="brId=null;renderBrazil()">← 목록</button></div>${brBody(x,false)}`;
+}
+function brForm(cat){
+  const e=brEdit?brRows.find(x=>x.id===brEdit):null;
+  const srcTxt=e&&Array.isArray(e.sources)?e.sources.map(s=>(s.title||"")+(s.url?" | "+s.url:"")).join("\n"):"";
+  const topics=BR_TOPICS[brSub]||[];
+  return `<details class="panel" ${e?"open":""}><summary style="cursor:pointer;font-size:13px;font-weight:600;color:var(--brass)">${e?"리포트 수정":"리포트 작성"} — ${esc(cat)}</summary>
+    <div class="frow" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr));margin-top:10px">
+      <div class="fg"><label>작성일</label><input type="date" id="br_date" value="${esc(e?.analysis_date||new Date().toISOString().slice(0,10))}"></div>
+      <div class="fg"><label>주제 태그 (쉼표로 구분)</label><input id="br_rel" value="${esc(e?.related||"")}" placeholder="${esc(topics.join(", "))}"></div>
+    </div>
+    <div class="fg"><label>제목 *</label><input id="br_title" value="${esc(e?.title||"")}" placeholder="${brSub==="econ"?"예: 브라질 경제 데일리 — 11/20(금)":"예: 브라질 채권·환율 데일리 — 11/20(금)"}"></div>
+    <div class="fg" style="margin-top:8px"><label>핵심 요약 (목록에 표시)</label><textarea id="br_sum" style="min-height:70px">${esc(e?.summary||"")}</textarea></div>
+    <div class="fg" style="margin-top:8px"><label>본문 (## 소제목, - 목록, **굵게**, | 표 | 사용 가능)</label><textarea id="br_body" style="min-height:260px;font-family:Consolas,monospace;font-size:12px">${esc(e?.content||"")}</textarea></div>
+    <div class="fg" style="margin-top:8px"><label>출처 (한 줄에 하나: 제목 | URL)</label><textarea id="br_src" style="min-height:70px;font-size:12px">${esc(srcTxt)}</textarea></div>
+    <div class="msg" id="br_msg"></div>
+    <button class="btn btn-p" style="margin-top:8px" onclick="brSave()">${e?"수정 저장":"등록"}</button>
+    ${e?`<button class="btn btn-s" style="margin-top:8px" onclick="brEdit=null;renderBrazil()">취소</button>`:""}
+  </details>`;
+}
+async function brSave(){
+  const v=id=>$(id).value.trim();
+  if(!v("br_title")){showMsg("br_msg","제목을 입력하세요");return}
+  const sources=v("br_src").split("\n").map(l=>l.trim()).filter(Boolean).map(l=>{const i=l.lastIndexOf("|");return i>0?{title:l.slice(0,i).trim(),url:l.slice(i+1).trim()}:(/^https?:/.test(l)?{title:l,url:l}:{title:l})});
+  const row={kind:"brazil",code:null,category:brCatName(brSub),related:v("br_rel")||null,analysis_date:v("br_date")||null,title:v("br_title"),summary:v("br_sum")||null,content:$("br_body").value,sources,updated_at:new Date().toISOString()};
+  const {data,error}=brEdit?await db.from("semi_analysis").update(row).eq("id",brEdit).select():await db.from("semi_analysis").insert({...row,owner:me.id}).select();
+  if(error){err(error);return}
+  brEdit=null; brId=data&&data[0]?data[0].id:null; await loadBrazil();
+}
+async function brDel(id){
+  if(!confirm("이 리포트를 삭제할까요?"))return;
+  const {error}=await db.from("semi_analysis").delete().eq("id",id);
+  if(error){err(error);return}
+  brId=null; await loadBrazil();
+}
 
 /* ---------- 공통 ---------- */
 function closeModal(id){$(id).classList.remove("open")}
